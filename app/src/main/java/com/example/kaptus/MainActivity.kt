@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -73,6 +74,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isDragging by remember { mutableStateOf(false) }
+    var lastActiveSubtitleDisplayed by remember { mutableStateOf<SubtitleEntry?>(null) } // State to remember last active subtitle
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -116,6 +118,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     currentTimeMs = 0L
                     sliderPosition = 0f
                     isPlaying = false
+                    lastActiveSubtitleDisplayed = null // Reset on new file load
                 } catch (e: Exception) {
                     errorMessage = "Error parsing SRT file: ${e.message}"
                 } finally {
@@ -131,10 +134,24 @@ fun MainScreen(modifier: Modifier = Modifier) {
     }
 
     val currentSubtitle = if (currentSubtitleIndex >= 0) subtitles[currentSubtitleIndex] else null
-    val previousSubtitle = if (currentSubtitleIndex > 0) subtitles[currentSubtitleIndex - 1] else null
-    val nextSubtitle = if (currentSubtitleIndex >= 0 && currentSubtitleIndex < subtitles.size - 1) {
-        subtitles[currentSubtitleIndex + 1]
+
+    // If a subtitle is currently active, update lastActiveSubtitleDisplayed
+    if (currentSubtitle != null) {
+        lastActiveSubtitleDisplayed = currentSubtitle
+    }
+
+    // Determine the reference index for C and D based on current or last active subtitle
+    val referenceIndex = if (currentSubtitleIndex != -1) { // If A is active
+        currentSubtitleIndex
+    } else { // If A is not active (State B)
+        lastActiveSubtitleDisplayed?.let { subtitles.indexOf(it) } ?: -1
+    }
+
+    val previousSubtitle = if (referenceIndex > 0) subtitles[referenceIndex - 1] else null
+    val nextSubtitle: SubtitleEntry? = if (referenceIndex != -1 && referenceIndex < subtitles.size - 1) {
+        subtitles[referenceIndex + 1]
     } else null
+
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -205,13 +222,14 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = 24.dp, vertical = 16.dp), // Added vertical padding here
                     contentAlignment = Alignment.Center
                 ) {
                     SubtitleRoll(
                         previousSubtitle = previousSubtitle,
                         currentSubtitle = currentSubtitle,
-                        nextSubtitle = nextSubtitle
+                        nextSubtitle = nextSubtitle,
+                        lastActiveSubtitle = lastActiveSubtitleDisplayed
                     )
                 }
             } else {
@@ -231,43 +249,12 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
-                    // Time display and play button
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${formatTime(currentTimeMs)} / ${formatTime(totalDurationMs)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = {
-                                    filePickerLauncher.launch("*/*")
-                                },
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Text("Change File")
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    isPlaying = !isPlaying
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (isPlaying) "Pause" else "Play",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
+                    // Time display
+                    Text(
+                        text = "${formatTime(currentTimeMs)} / ${formatTime(totalDurationMs)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -288,6 +275,57 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         valueRange = 0f..totalDurationMs.toFloat(),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Playback controls: -5s, -1s, Play/Pause, +1s, +5s
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(onClick = { currentTimeMs = (currentTimeMs - 5000).coerceAtLeast(0L) }) {
+                            Text("-5s")
+                        }
+                        Button(onClick = { currentTimeMs = (currentTimeMs - 1000).coerceAtLeast(0L) }) {
+                            Text("-1s")
+                        }
+                        IconButton(
+                            onClick = {
+                                isPlaying = !isPlaying
+                            },
+                            modifier = Modifier
+                                .size(64.dp) // Make it larger
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), // A subtle background
+                                    shape = CircleShape // Round container
+                                )
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp) // Make the icon itself larger
+                            )
+                        }
+                        Button(onClick = { currentTimeMs = (currentTimeMs + 1000).coerceAtMost(totalDurationMs) }) {
+                            Text("+1s")
+                        }
+                        Button(onClick = { currentTimeMs = (currentTimeMs + 5000).coerceAtMost(totalDurationMs) }) {
+                            Text("+5s")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            filePickerLauncher.launch("*/*")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Change File")
+                    }
                 }
             }
         }
@@ -298,11 +336,12 @@ fun MainScreen(modifier: Modifier = Modifier) {
 fun SubtitleRoll(
     previousSubtitle: SubtitleEntry?,
     currentSubtitle: SubtitleEntry?,
-    nextSubtitle: SubtitleEntry?
+    nextSubtitle: SubtitleEntry?,
+    lastActiveSubtitle: SubtitleEntry? // New parameter
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.SpaceEvenly, // Changed to SpaceEvenly
         modifier = Modifier.fillMaxSize()
     ) {
         // Previous subtitle (above, smaller, greyed out)
@@ -315,7 +354,7 @@ fun SubtitleRoll(
             previousSubtitle?.let { subtitle ->
                 Text(
                     text = subtitle.text,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp), // Reduced font size
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier
@@ -326,7 +365,7 @@ fun SubtitleRoll(
             }
         }
 
-        // Current subtitle (center, large, prominent)
+        // Current subtitle (center, large, prominent) or last active subtitle (greyed out)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -334,6 +373,7 @@ fun SubtitleRoll(
             contentAlignment = Alignment.Center
         ) {
             currentSubtitle?.let { subtitle ->
+                // State A: Currently playing
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -355,13 +395,25 @@ fun SubtitleRoll(
                     )
                 }
             } ?: run {
-                // Show when no subtitle is active
-                Text(
-                    text = "No subtitle at current time",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    textAlign = TextAlign.Center
-                )
+                // currentSubtitle is null (State B or initial state)
+                lastActiveSubtitle?.let { subtitle ->
+                    // State B: Display last active subtitle, but greyed out
+                    Text(
+                        text = subtitle.text,
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), // Greyed out
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp) // Maintain padding for consistent sizing
+                    )
+                } ?: run {
+                    // Initial state or no last active subtitle ever
+                    Spacer(modifier = Modifier.fillMaxSize())
+                }
             }
         }
 
@@ -375,7 +427,7 @@ fun SubtitleRoll(
             nextSubtitle?.let { subtitle ->
                 Text(
                     text = subtitle.text,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp), // Reduced font size
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier
