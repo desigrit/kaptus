@@ -7,11 +7,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -19,10 +22,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.kaptus.ui.theme.KaptusTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -30,7 +37,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import kotlin.math.abs
 
 data class SubtitleEntry(
     val index: Int,
@@ -61,32 +67,30 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var subtitles by remember { mutableStateOf<List<SubtitleEntry>>(emptyList()) }
     var fileName by remember { mutableStateOf<String?>(null) }
     var currentTimeMs by remember { mutableStateOf(0L) }
+    var sliderPosition by remember { mutableStateOf(0f) }
     var isPlaying by remember { mutableStateOf(false) }
     var totalDurationMs by remember { mutableStateOf(0L) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isDragging by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
 
-    // Auto-scroll to current subtitle
-    LaunchedEffect(currentTimeMs, subtitles) {
-        if (subtitles.isNotEmpty()) {
-            val currentSubtitleIndex = subtitles.indexOfFirst { subtitle ->
-                currentTimeMs >= subtitle.startTimeMs && currentTimeMs <= subtitle.endTimeMs
-            }
-            if (currentSubtitleIndex >= 0) {
-                listState.animateScrollToItem(currentSubtitleIndex)
-            }
+    // Update slider position smoothly when not dragging
+    LaunchedEffect(currentTimeMs, isDragging) {
+        if (!isDragging) {
+            sliderPosition = currentTimeMs.toFloat()
         }
     }
 
-    // Playback timer
+    // Playback timer with better performance
     LaunchedEffect(isPlaying) {
         while (isPlaying && currentTimeMs < totalDurationMs) {
-            delay(100) // Update every 100ms
-            currentTimeMs += 100
+            delay(50) // Update every 50ms for smoother playback
+            if (!isDragging) {
+                currentTimeMs += 50
+            }
         }
         if (currentTimeMs >= totalDurationMs) {
             isPlaying = false
@@ -110,6 +114,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         parsedSubtitles.last().endTimeMs
                     } else 0L
                     currentTimeMs = 0L
+                    sliderPosition = 0f
                     isPlaying = false
                 } catch (e: Exception) {
                     errorMessage = "Error parsing SRT file: ${e.message}"
@@ -120,236 +125,265 @@ fun MainScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
+    // Find current, previous, and next subtitles
+    val currentSubtitleIndex = subtitles.indexOfFirst { subtitle ->
+        currentTimeMs >= subtitle.startTimeMs && currentTimeMs <= subtitle.endTimeMs
+    }
+
+    val currentSubtitle = if (currentSubtitleIndex >= 0) subtitles[currentSubtitleIndex] else null
+    val previousSubtitle = if (currentSubtitleIndex > 0) subtitles[currentSubtitleIndex - 1] else null
+    val nextSubtitle = if (currentSubtitleIndex >= 0 && currentSubtitleIndex < subtitles.size - 1) {
+        subtitles[currentSubtitleIndex + 1]
+    } else null
+
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxSize()
         ) {
-            Text(
-                text = "Kaptus - Subtitle Sync",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
-
-            Button(
-                onClick = {
-                    filePickerLauncher.launch("*/*")
-                },
-                modifier = Modifier.padding(bottom = 16.dp)
+            // Header
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Select SRT File")
-            }
-
-            fileName?.let {
                 Text(
-                    text = "File: $it",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    text = "Kaptus",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold
                 )
-            }
 
-            if (subtitles.isNotEmpty()) {
-                // Timeline controls
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
+                if (fileName == null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            filePickerLauncher.launch("*/*")
+                        }
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Timeline",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${formatTime(currentTimeMs)} / ${formatTime(totalDurationMs)}",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                IconButton(
-                                    onClick = {
-                                        isPlaying = !isPlaying
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                        contentDescription = if (isPlaying) "Pause" else "Play"
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Timeline slider
-                        Slider(
-                            value = currentTimeMs.toFloat(),
-                            onValueChange = { newTime ->
-                                currentTimeMs = newTime.toLong()
-                                isPlaying = false // Pause when manually seeking
-                            },
-                            valueRange = 0f..totalDurationMs.toFloat(),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Current subtitle display
-                        val currentSubtitle = subtitles.find { subtitle ->
-                            currentTimeMs >= subtitle.startTimeMs && currentTimeMs <= subtitle.endTimeMs
-                        }
-
-                        if (currentSubtitle != null) {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp)
-                                ) {
-                                    Text(
-                                        text = "Now Playing:",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Text(
-                                        text = currentSubtitle.text,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                        }
+                        Text("Select SRT File")
                     }
+                } else {
+                    Text(
+                        text = fileName!!,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
-            }
-
-            errorMessage?.let {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = it,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    CircularProgressIndicator()
                 }
-            }
-
-            if (subtitles.isNotEmpty()) {
-                Text(
-                    text = "All Subtitles",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    fontWeight = FontWeight.Bold
-                )
-
-                LazyColumn(
-                    state = listState
+            } else if (errorMessage != null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(subtitles) { subtitle ->
-                        SubtitleCard(
-                            subtitle = subtitle,
-                            isActive = currentTimeMs >= subtitle.startTimeMs && currentTimeMs <= subtitle.endTimeMs,
-                            onClick = {
-                                currentTimeMs = subtitle.startTimeMs
-                                isPlaying = false
-                            }
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
+                }
+            } else if (subtitles.isNotEmpty()) {
+                // Main subtitle display area
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SubtitleRoll(
+                        previousSubtitle = previousSubtitle,
+                        currentSubtitle = currentSubtitle,
+                        nextSubtitle = nextSubtitle
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+
+        // Bottom scrubber controls
+        if (subtitles.isNotEmpty()) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    // Time display and play button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${formatTime(currentTimeMs)} / ${formatTime(totalDurationMs)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = {
+                                    filePickerLauncher.launch("*/*")
+                                },
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text("Change File")
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    isPlaying = !isPlaying
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "Pause" else "Play",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // High-performance timeline slider
+                    Slider(
+                        value = sliderPosition,
+                        onValueChange = { newValue ->
+                            sliderPosition = newValue
+                            if (!isDragging) {
+                                isDragging = true
+                            }
+                            currentTimeMs = newValue.toLong()
+                        },
+                        onValueChangeFinished = {
+                            isDragging = false
+                            currentTimeMs = sliderPosition.toLong()
+                        },
+                        valueRange = 0f..totalDurationMs.toFloat(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SubtitleCard(
-    subtitle: SubtitleEntry,
-    isActive: Boolean,
-    onClick: () -> Unit
+fun SubtitleRoll(
+    previousSubtitle: SubtitleEntry?,
+    currentSubtitle: SubtitleEntry?,
+    nextSubtitle: SubtitleEntry?
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        onClick = onClick
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxSize()
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp)
+        // Previous subtitle (above, smaller, greyed out)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            previousSubtitle?.let { subtitle ->
                 Text(
-                    text = "#${subtitle.index}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isActive) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                Text(
-                    text = "${subtitle.startTime} → ${subtitle.endTime}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isActive) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
+                    text = subtitle.text,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                        .alpha(0.7f)
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = subtitle.text,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
-                color = if (isActive) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
+        }
+
+        // Current subtitle (center, large, prominent)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            currentSubtitle?.let { subtitle ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = subtitle.text,
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                    )
                 }
-            )
+            } ?: run {
+                // Show when no subtitle is active
+                Text(
+                    text = "No subtitle at current time",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        // Next subtitle (below, smaller, greyed out)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            nextSubtitle?.let { subtitle ->
+                Text(
+                    text = subtitle.text,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                        .alpha(0.7f)
+                )
+            }
         }
     }
 }
@@ -456,9 +490,12 @@ private fun formatTime(timeMs: Long): String {
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
-    val millis = timeMs % 1000
 
-    return String.format("%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
+    return if (hours > 0) {
+        String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format("%02d:%02d", minutes, seconds)
+    }
 }
 
 private fun getFileName(context: android.content.Context, uri: Uri): String {
