@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    id("kotlin-parcelize") // Make sure this line is present
 }
 
 android {
@@ -27,7 +28,6 @@ android {
         }
     }
 
-    // Enable Compose
     buildFeatures {
         compose = true
     }
@@ -47,7 +47,6 @@ android {
 }
 
 dependencies {
-    // UI and Material Design
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -56,26 +55,16 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-
-    // Compose BOM and dependencies
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
-
-    // File handling
     implementation(libs.androidx.documentfile)
-
-    // Permissions
     implementation(libs.androidx.activity.ktx)
-
-    // Remove duplicate constraint layout (you have both compose and view versions)
-    // Keep only one based on what you plan to use
     implementation(libs.androidx.constraintlayout.v221)
-    implementation(libs.material3) // Or your Material 3 version
-    implementation(libs.androidx.material.icons.core) // Ensure version compatibility
-    implementation(libs.androidx.material.icons.extended) // Ensure version compatibility
-
-    }
+    implementation(libs.material3)
+    implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
+}
