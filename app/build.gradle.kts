@@ -74,4 +74,8 @@ dependencies {
     // Remove duplicate constraint layout (you have both compose and view versions)
     // Keep only one based on what you plan to use
     implementation(libs.androidx.constraintlayout.v221)
-}
+    implementation(libs.material3) // Or your Material 3 version
+    implementation(libs.androidx.material.icons.core) // Ensure version compatibility
+    implementation(libs.androidx.material.icons.extended) // Ensure version compatibility
+
+    }
