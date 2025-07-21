@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.sp
 import com.example.kaptus.data.SubtitleEntry
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import kotlin.math.abs
 
 @Composable
@@ -33,7 +35,8 @@ fun SubtitleRoll(
 ) {
     val listState = rememberLazyListState()
 
-    // When playback is active, scroll to the current subtitle
+    // When playback is active, scroll to the current subtitle.
+    // This is the ONLY effect that should run when isPlaying = true.
     LaunchedEffect(currentSubtitle) {
         if (isPlaying) {
             currentSubtitle?.let {
@@ -47,21 +50,22 @@ fun SubtitleRoll(
         }
     }
 
-    // When the user stops scrolling, snap to the nearest item and update the time
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }
-            .distinctUntilChanged()
-            .filter { !it }
-            .collect {
-                val viewportCenter = listState.layoutInfo.viewportSize.height / 2
-                val centerItem = listState.layoutInfo.visibleItemsInfo
-                    .minByOrNull { abs(it.offset + it.size / 2 - viewportCenter) }
+    // When the user stops a MANUAL scroll, snap to the nearest item and report it.
+    // This effect is now much simpler.
+    LaunchedEffect(listState.isScrollInProgress) {
+        // We only care about this logic when the user is NOT playing.
+        if (!listState.isScrollInProgress && !isPlaying) {
+            val viewportCenter = listState.layoutInfo.viewportSize.height / 2
+            val centerItem = listState.layoutInfo.visibleItemsInfo
+                .minByOrNull { abs(it.offset + it.size / 2 - viewportCenter) }
 
-                if (centerItem != null) {
-                    listState.animateScrollToItem(centerItem.index)
-                    onSubtitleSelected(subtitles[centerItem.index].startTimeMs)
-                }
+            if (centerItem != null) {
+                // Gently snap to the final position
+                listState.animateScrollToItem(centerItem.index)
+                // Report the selected time to the ViewModel
+                onSubtitleSelected(subtitles[centerItem.index].startTimeMs)
             }
+        }
     }
 
     LazyColumn(
