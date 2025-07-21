@@ -6,17 +6,15 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.kaptus.data.SubtitleEntry
+import com.example.kaptus.ui.composables.KaptusTopAppBar
 import com.example.kaptus.ui.composables.PlaybackControls
 import com.example.kaptus.ui.composables.SubtitleRoll
 import com.example.kaptus.utils.getFileName
@@ -38,7 +36,6 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var isDragging by remember { mutableStateOf(false) }
-    var lastActiveSubtitleDisplayed by rememberSaveable { mutableStateOf<SubtitleEntry?>(null) }
     var showMenu by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -77,7 +74,6 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     currentTimeMs = 0L
                     sliderPosition = 0f
                     isPlaying = false
-                    lastActiveSubtitleDisplayed = null
                 } catch (e: Exception) {
                     errorMessage = "Error parsing SRT file: ${e.message}"
                 } finally {
@@ -87,85 +83,52 @@ fun MainScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    val currentSubtitleIndex = subtitles.indexOfFirst { it.isActiveAt(currentTimeMs) }
-    val currentSubtitle = if (currentSubtitleIndex != -1) subtitles[currentSubtitleIndex] else null
-    if (currentSubtitle != null) {
-        lastActiveSubtitleDisplayed = currentSubtitle
-    }
-    val referenceIndex = currentSubtitleIndex.takeIf { it != -1 } ?: lastActiveSubtitleDisplayed?.let { subtitles.indexOf(it) } ?: -1
-    val previousSubtitle = if (referenceIndex > 0) subtitles[referenceIndex - 1] else null
-    val nextSubtitle = if (referenceIndex != -1 && referenceIndex < subtitles.size - 1) subtitles[referenceIndex + 1] else null
+    val currentSubtitle = subtitles.find { it.isActiveAt(currentTimeMs) }
 
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Kaptus", style = MaterialTheme.typography.titleLarge)
-                        fileName?.let {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    if (subtitles.isNotEmpty()) {
-                        IconButton(onClick = { showMenu = !showMenu }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Change SRT File") },
-                                onClick = {
-                                    showMenu = false
-                                    filePickerLauncher.launch("*/*")
-                                }
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+            KaptusTopAppBar(
+                fileName = fileName,
+                showMenu = showMenu,
+                onShowMenuChange = { showMenu = it },
+                onChangeFileClick = { filePickerLauncher.launch("*/*") },
+                showActions = subtitles.isNotEmpty()
             )
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
             if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (subtitles.isNotEmpty()) {
-                SubtitleRoll(
+                Box(
                     modifier = Modifier.fillMaxSize(),
-                    previousSubtitle = previousSubtitle,
-                    currentSubtitle = currentSubtitle,
-                    nextSubtitle = nextSubtitle,
-                    lastActiveSubtitle = lastActiveSubtitleDisplayed,
-                    onSeek = { direction ->
-                        val newIndex = when (direction) {
-                            "up" -> (referenceIndex + 1).coerceAtMost(subtitles.lastIndex)
-                            "down" -> (referenceIndex - 1).coerceAtLeast(0)
-                            else -> referenceIndex
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (subtitles.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SubtitleRoll(
+                        modifier = Modifier.height(600.dp),
+                        subtitles = subtitles,
+                        currentSubtitle = currentSubtitle,
+                        isPlaying = isPlaying,
+                        onSubtitleSelected = { newTime ->
+                            // This is the corrected logic
+                            currentTimeMs = newTime
                         }
-                        if (newIndex != referenceIndex) {
-                            currentTimeMs = subtitles[newIndex].startTimeMs
-                        }
-                    }
-                )
+                    )
+                }
 
                 PlaybackControls(
-                    modifier = Modifier.align(Alignment.BottomCenter),
                     isPlaying = isPlaying,
                     currentTimeMs = currentTimeMs,
                     totalDurationMs = totalDurationMs,

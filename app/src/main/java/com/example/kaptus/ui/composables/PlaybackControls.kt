@@ -122,7 +122,7 @@ private fun SeekIcon(icon: ImageVector, text: String, isMirrored: Boolean = fals
                 imageVector = icon,
                 contentDescription = "Seek $text seconds",
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(24.dp)
                     .scale(scaleX = if (isMirrored) -1f else 1f, scaleY = 1f)
             )
             Text(
