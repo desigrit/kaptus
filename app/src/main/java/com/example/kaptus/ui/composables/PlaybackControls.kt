@@ -2,6 +2,7 @@
 
 package com.example.kaptus.ui.composables
 
+import android.content.res.Configuration
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -11,14 +12,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,14 +33,17 @@ fun PlaybackControls(
     onSliderChange: (Float) -> Unit,
     onSliderChangeFinished: () -> Unit,
     onSeek: (Long) -> Unit,
+    orientation: Int
 ) {
+    val verticalPadding = if (orientation == Configuration.ORIENTATION_LANDSCAPE) 8.dp else 16.dp
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
         shadowElevation = 8.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = verticalPadding)
         ) {
             Slider(
                 value = sliderPosition,
@@ -66,17 +67,17 @@ fun PlaybackControls(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { onSeek(-5000) }, modifier = Modifier.size(48.dp)) {
-                    SeekIcon(icon = Icons.Default.Replay, text = "5")
+                    SeekIcon(text = "-5")
                 }
                 IconButton(onClick = { onSeek(-1000) }, modifier = Modifier.size(60.dp)) {
-                    SeekIcon(icon = Icons.Default.Replay, text = "1")
+                    SeekIcon(text = "-1")
                 }
                 val buttonShapeCornerRadius by animateDpAsState(
                     targetValue = if (isPlaying) 8.dp else 36.dp,
@@ -100,10 +101,10 @@ fun PlaybackControls(
                     )
                 }
                 IconButton(onClick = { onSeek(1000) }, modifier = Modifier.size(60.dp)) {
-                    SeekIcon(icon = Icons.Default.Replay, text = "1", isMirrored = true)
+                    SeekIcon(text = "+1")
                 }
                 IconButton(onClick = { onSeek(5000) }, modifier = Modifier.size(48.dp)) {
-                    SeekIcon(icon = Icons.Default.Replay, text = "5", isMirrored = true)
+                    SeekIcon(text = "+5")
                 }
             }
         }
@@ -111,24 +112,17 @@ fun PlaybackControls(
 }
 
 @Composable
-private fun SeekIcon(icon: ImageVector, text: String, isMirrored: Boolean = false) {
+private fun SeekIcon(text: String) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
         modifier = Modifier.fillMaxSize()
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = icon,
-                contentDescription = "Seek $text seconds",
-                modifier = Modifier
-                    .size(24.dp)
-                    .scale(scaleX = if (isMirrored) -1f else 1f, scaleY = 1f)
-            )
             Text(
                 text = text,
                 fontWeight = FontWeight.Bold,
-                fontSize = 8.sp,
+                fontSize = 14.sp, // Increased font size for better visibility
                 color = MaterialTheme.colorScheme.onSurface
             )
         }

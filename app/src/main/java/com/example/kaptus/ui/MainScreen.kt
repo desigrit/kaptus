@@ -2,15 +2,22 @@
 
 package com.example.kaptus.ui
 
+import android.content.res.Configuration
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.kaptus.data.SubtitleEntry
@@ -35,22 +42,20 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var totalDurationMs by rememberSaveable { mutableStateOf(0L) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var isDragging by remember { mutableStateOf(false) }
+    var isDraggingSlider by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var controlsVisible by rememberSaveable { mutableStateOf(true) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val orientation = LocalConfiguration.current.orientation
 
-    LaunchedEffect(currentTimeMs, isDragging) {
-        if (!isDragging) {
-            sliderPosition = currentTimeMs.toFloat()
-        }
-    }
+    // --- State Synchronization ---
 
     LaunchedEffect(isPlaying) {
         while (isPlaying && currentTimeMs < totalDurationMs) {
             delay(50)
-            if (!isDragging) {
+            if (!isDraggingSlider) {
                 currentTimeMs += 50
             }
         }
@@ -58,6 +63,14 @@ fun MainScreen(modifier: Modifier = Modifier) {
             isPlaying = false
         }
     }
+
+    LaunchedEffect(currentTimeMs) {
+        if (!isDraggingSlider) {
+            sliderPosition = currentTimeMs.toFloat()
+        }
+    }
+
+    // --- File Loading ---
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -68,12 +81,15 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 errorMessage = null
                 try {
                     val parsedSubtitles = withContext(Dispatchers.IO) { parseSrtFile(context, uri) }
-                    subtitles = parsedSubtitles
                     fileName = getFileName(context, uri)
                     totalDurationMs = if (parsedSubtitles.isNotEmpty()) parsedSubtitles.last().endTimeMs else 0L
+
+                    // Reset state before updating list
                     currentTimeMs = 0L
                     sliderPosition = 0f
                     isPlaying = false
+
+                    subtitles = parsedSubtitles
                 } catch (e: Exception) {
                     errorMessage = "Error parsing SRT file: ${e.message}"
                 } finally {
@@ -85,35 +101,41 @@ fun MainScreen(modifier: Modifier = Modifier) {
 
     val currentSubtitle = subtitles.find { it.isActiveAt(currentTimeMs) }
 
+    // --- UI Layout ---
+
     Scaffold(
         modifier = modifier,
         topBar = {
-            KaptusTopAppBar(
-                fileName = fileName,
-                showMenu = showMenu,
-                onShowMenuChange = { showMenu = it },
-                onChangeFileClick = { filePickerLauncher.launch("*/*") },
-                showActions = subtitles.isNotEmpty()
-            )
+            AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
+                KaptusTopAppBar(
+                    fileName = fileName,
+                    showMenu = showMenu,
+                    onShowMenuChange = { showMenu = it },
+                    onChangeFileClick = { filePickerLauncher.launch("*/*") },
+                    showActions = subtitles.isNotEmpty(),
+                    orientation = orientation
+                )
+            }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
             if (isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (subtitles.isNotEmpty()) {
+                // Main content area that toggles controls
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null // No ripple effect
+                        ) {
+                            controlsVisible = !controlsVisible
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     SubtitleRoll(
@@ -122,32 +144,38 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         currentSubtitle = currentSubtitle,
                         isPlaying = isPlaying,
                         onSubtitleSelected = { newTime ->
-                            // This is the corrected logic
                             currentTimeMs = newTime
                         }
                     )
                 }
 
-                PlaybackControls(
-                    isPlaying = isPlaying,
-                    currentTimeMs = currentTimeMs,
-                    totalDurationMs = totalDurationMs,
-                    sliderPosition = sliderPosition,
-                    onPlayPauseClick = { isPlaying = !isPlaying },
-                    onSliderChange = { newValue ->
-                        sliderPosition = newValue
-                        if (!isDragging) isDragging = true
-                        currentTimeMs = newValue.toLong()
-                    },
-                    onSliderChangeFinished = {
-                        isDragging = false
-                        currentTimeMs = sliderPosition.toLong()
-                    },
-                    onSeek = { offset ->
-                        currentTimeMs = (currentTimeMs + offset).coerceIn(0L, totalDurationMs)
-                    }
-                )
+                // Controls overlay
+                AnimatedVisibility(
+                    visible = controlsVisible,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    PlaybackControls(
+                        isPlaying = isPlaying,
+                        currentTimeMs = currentTimeMs,
+                        totalDurationMs = totalDurationMs,
+                        sliderPosition = sliderPosition,
+                        onPlayPauseClick = { isPlaying = !isPlaying },
+                        onSliderChange = { newValue ->
+                            isDraggingSlider = true
+                            sliderPosition = newValue
+                            currentTimeMs = newValue.toLong()
+                        },
+                        onSliderChangeFinished = { isDraggingSlider = false },
+                        onSeek = { offset ->
+                            currentTimeMs = (currentTimeMs + offset).coerceIn(0L, totalDurationMs)
+                        },
+                        orientation = orientation
+                    )
+                }
             } else {
+                // Initial State
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
