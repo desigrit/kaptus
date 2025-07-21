@@ -71,13 +71,46 @@ fun MainScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // --- State Synchronization ---
+// --- State Synchronization ---
     LaunchedEffect(isPlaying) {
+        if (!isPlaying) return@LaunchedEffect
+
+        // Get the time from the system clock when playback starts.
+        var startRealTime = System.nanoTime()
+        // Get the position in the media that we are starting from.
+        var startMediaTime = currentTimeMs
+
         while (isPlaying && currentTimeMs < totalDurationMs) {
-            delay(50)
-            if (!isDraggingSlider) currentTimeMs += 50
+            // If the user starts dragging the slider, don't advance the time here.
+            // Instead, reset our time references for when they let go.
+            if (isDraggingSlider) {
+                // When dragging, the user is controlling the time.
+                // We update our media time reference to match the slider's position.
+                startMediaTime = currentTimeMs
+                // And we reset the "real time" reference to now.
+                startRealTime = System.nanoTime()
+                delay(16) // A short delay to prevent a busy-wait loop
+                continue
+            }
+
+            // This is how much "real time" has passed since playback started or was last reset.
+            val elapsedRealTime = System.nanoTime() - startRealTime
+
+            // The new media time is the time we started at, plus the elapsed real time.
+            val newTime = startMediaTime + (elapsedRealTime / 1_000_000)
+
+            // Only update the state if the time has actually changed to avoid unnecessary work.
+            if (newTime != currentTimeMs) {
+                currentTimeMs = newTime.coerceIn(0L, totalDurationMs)
+            }
+
+            // Update at a rate of roughly 60 frames per second.
+            delay(16)
         }
-        if (currentTimeMs >= totalDurationMs) isPlaying = false
+
+        if (currentTimeMs >= totalDurationMs) {
+            isPlaying = false
+        }
     }
 
     LaunchedEffect(currentTimeMs) {
