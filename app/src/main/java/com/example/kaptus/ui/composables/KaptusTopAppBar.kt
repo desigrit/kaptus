@@ -3,77 +3,84 @@
 package com.example.kaptus.ui.composables
 
 import android.content.res.Configuration
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box // Added this import
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KaptusTopAppBar(
     fileName: String?,
-    showMenu: Boolean,
-    onShowMenuChange: (Boolean) -> Unit,
-    onChangeFileClick: () -> Unit,
     showActions: Boolean,
-    orientation: Int
+    orientation: Int,
+    isSearchActive: Boolean,
+    searchQuery: String,
+    searchResults: Pair<Int, Int>,
+    onSearchQueryChange: (String) -> Unit,
+    onSearchActiveChange: (Boolean) -> Unit,
+    onNextResult: () -> Unit,
+    onPreviousResult: () -> Unit,
+    onFlipOrientationClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(vertical = 4.dp, horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column {
-            Text(
-                "Kaptus",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-                fileName?.let {
+    TopAppBar(
+        title = {
+            if (!isSearchActive) {
+                Column {
                     Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        "Kaptus",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
                     )
-                }
-            }
-        }
-
-        if (showActions) {
-            Box {
-                IconButton(onClick = { onShowMenuChange(true) }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { onShowMenuChange(false) }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Change SRT File") },
-                        onClick = {
-                            onShowMenuChange(false)
-                            onChangeFileClick()
+                    if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+                        fileName?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                    )
+                    }
                 }
             }
-        }
-    }
+        },
+        actions = {
+            if (showActions) {
+                if (isSearchActive) {
+                    SearchBar(
+                        searchQuery = searchQuery,
+                        searchResults = searchResults,
+                        onSearchQueryChange = onSearchQueryChange,
+                        onCloseSearch = {
+                            onSearchActiveChange(false)
+                            onSearchQueryChange("")
+                        },
+                        onNextResult = onNextResult,
+                        onPreviousResult = onPreviousResult
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { onSearchActiveChange(true) }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
+                        IconButton(onClick = onFlipOrientationClick) {
+                            Icon(Icons.Default.ScreenRotation, contentDescription = "Flip Orientation")
+                        }
+                    }
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent
+        )
+    )
 }

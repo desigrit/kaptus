@@ -2,6 +2,8 @@
 
 package com.example.kaptus.ui
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -34,6 +36,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(modifier: Modifier = Modifier) {
+    // Core State
     var subtitles by rememberSaveable { mutableStateOf<List<SubtitleEntry>>(emptyList()) }
     var fileName by rememberSaveable { mutableStateOf<String?>(null) }
     var currentTimeMs by rememberSaveable { mutableStateOf(0L) }
@@ -43,34 +46,53 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var isDraggingSlider by remember { mutableStateOf(false) }
-    var showMenu by remember { mutableStateOf(false) }
     var controlsVisible by rememberSaveable { mutableStateOf(true) }
+
+    // Search State
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<Int>>(emptyList()) }
+    var currentSearchResultIndex by rememberSaveable { mutableStateOf(-1) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val orientation = LocalConfiguration.current.orientation
 
-    // --- State Synchronization ---
+    // --- Search Logic ---
+    LaunchedEffect(searchQuery, subtitles) {
+        if (searchQuery.isNotBlank()) {
+            searchResults = subtitles.mapIndexedNotNull { index, subtitle ->
+                if (subtitle.text.contains(searchQuery, ignoreCase = true)) index else null
+            }
+            currentSearchResultIndex = if (searchResults.isNotEmpty()) 0 else -1
+        } else {
+            searchResults = emptyList()
+            currentSearchResultIndex = -1
+        }
+    }
 
+    // Jump to the selected search result
+    LaunchedEffect(currentSearchResultIndex) {
+        if (currentSearchResultIndex != -1) {
+            val targetSubtitleIndex = searchResults[currentSearchResultIndex]
+            currentTimeMs = subtitles[targetSubtitleIndex].startTimeMs
+            // The SubtitleRoll will automatically scroll to the new current subtitle
+        }
+    }
+
+
+    // --- State Synchronization ---
     LaunchedEffect(isPlaying) {
         while (isPlaying && currentTimeMs < totalDurationMs) {
             delay(50)
-            if (!isDraggingSlider) {
-                currentTimeMs += 50
-            }
+            if (!isDraggingSlider) currentTimeMs += 50
         }
-        if (currentTimeMs >= totalDurationMs) {
-            isPlaying = false
-        }
+        if (currentTimeMs >= totalDurationMs) isPlaying = false
     }
 
     LaunchedEffect(currentTimeMs) {
-        if (!isDraggingSlider) {
-            sliderPosition = currentTimeMs.toFloat()
-        }
+        if (!isDraggingSlider) sliderPosition = currentTimeMs.toFloat()
     }
-
-    // --- File Loading ---
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -78,17 +100,13 @@ fun MainScreen(modifier: Modifier = Modifier) {
         uri?.let {
             scope.launch {
                 isLoading = true
-                errorMessage = null
                 try {
                     val parsedSubtitles = withContext(Dispatchers.IO) { parseSrtFile(context, uri) }
                     fileName = getFileName(context, uri)
                     totalDurationMs = if (parsedSubtitles.isNotEmpty()) parsedSubtitles.last().endTimeMs else 0L
-
-                    // Reset state before updating list
                     currentTimeMs = 0L
                     sliderPosition = 0f
                     isPlaying = false
-
                     subtitles = parsedSubtitles
                 } catch (e: Exception) {
                     errorMessage = "Error parsing SRT file: ${e.message}"
@@ -102,18 +120,37 @@ fun MainScreen(modifier: Modifier = Modifier) {
     val currentSubtitle = subtitles.find { it.isActiveAt(currentTimeMs) }
 
     // --- UI Layout ---
-
     Scaffold(
         modifier = modifier,
         topBar = {
             AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
                 KaptusTopAppBar(
                     fileName = fileName,
-                    showMenu = showMenu,
-                    onShowMenuChange = { showMenu = it },
-                    onChangeFileClick = { filePickerLauncher.launch("*/*") },
                     showActions = subtitles.isNotEmpty(),
-                    orientation = orientation
+                    orientation = orientation,
+                    isSearchActive = isSearchActive,
+                    searchQuery = searchQuery,
+                    searchResults = Pair(currentSearchResultIndex, searchResults.size),
+                    onSearchQueryChange = { searchQuery = it },
+                    onSearchActiveChange = { isSearchActive = it },
+                    onNextResult = {
+                        if (searchResults.isNotEmpty()) {
+                            currentSearchResultIndex = (currentSearchResultIndex + 1) % searchResults.size
+                        }
+                    },
+                    onPreviousResult = {
+                        if (searchResults.isNotEmpty()) {
+                            currentSearchResultIndex = (currentSearchResultIndex - 1 + searchResults.size) % searchResults.size
+                        }
+                    },
+                    onFlipOrientationClick = {
+                        val activity = context as? Activity
+                        activity?.requestedOrientation = if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                        } else {
+                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        }
+                    }
                 )
             }
         }
@@ -126,13 +163,12 @@ fun MainScreen(modifier: Modifier = Modifier) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (subtitles.isNotEmpty()) {
-                // Main content area that toggles controls
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null // No ripple effect
+                            indication = null
                         ) {
                             controlsVisible = !controlsVisible
                         },
@@ -149,7 +185,6 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     )
                 }
 
-                // Controls overlay
                 AnimatedVisibility(
                     visible = controlsVisible,
                     modifier = Modifier.align(Alignment.BottomCenter),
