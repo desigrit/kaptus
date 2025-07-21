@@ -71,16 +71,6 @@ fun MainScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    // Jump to the selected search result
-    LaunchedEffect(currentSearchResultIndex) {
-        if (currentSearchResultIndex != -1) {
-            val targetSubtitleIndex = searchResults[currentSearchResultIndex]
-            currentTimeMs = subtitles[targetSubtitleIndex].startTimeMs
-            // The SubtitleRoll will automatically scroll to the new current subtitle
-        }
-    }
-
-
     // --- State Synchronization ---
     LaunchedEffect(isPlaying) {
         while (isPlaying && currentTimeMs < totalDurationMs) {
@@ -135,12 +125,16 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     onSearchActiveChange = { isSearchActive = it },
                     onNextResult = {
                         if (searchResults.isNotEmpty()) {
-                            currentSearchResultIndex = (currentSearchResultIndex + 1) % searchResults.size
+                            val nextIndex = (currentSearchResultIndex + 1) % searchResults.size
+                            currentSearchResultIndex = nextIndex
+                            currentTimeMs = subtitles[searchResults[nextIndex]].startTimeMs
                         }
                     },
                     onPreviousResult = {
                         if (searchResults.isNotEmpty()) {
-                            currentSearchResultIndex = (currentSearchResultIndex - 1 + searchResults.size) % searchResults.size
+                            val prevIndex = (currentSearchResultIndex - 1 + searchResults.size) % searchResults.size
+                            currentSearchResultIndex = prevIndex
+                            currentTimeMs = subtitles[searchResults[prevIndex]].startTimeMs
                         }
                     },
                     onFlipOrientationClick = {
