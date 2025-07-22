@@ -26,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kaptus.PlaybackViewModel
 import com.example.kaptus.ui.composables.*
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlin.math.abs
 
 @Composable
 fun MainScreen(
@@ -38,22 +41,51 @@ fun MainScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
 
-    val flingBehavior = rememberSnapFlingBehavior(
-        lazyListState = listState,
-        onSnap = { snappedIndex ->
-            val subtitleIndex = snappedIndex - 1
-            if (subtitleIndex in uiState.subtitles.indices) {
-                viewModel.onSubtitleSelected(uiState.subtitles[subtitleIndex].startTimeMs)
-            }
+    // This flag helps differentiate between user scrolls and app-initiated scrolls after pausing.
+    val justPaused = remember { mutableStateOf(false) }
+
+    // This effect sets the flag when the user pauses playback.
+    LaunchedEffect(uiState.isPlaying) {
+        if (!uiState.isPlaying) {
+            justPaused.value = true
         }
-    )
+    }
+
+    // This effect handles the "snap-to-center" logic when a user scroll finishes.
+    LaunchedEffect(listState, uiState.isPlaying) {
+        snapshotFlow { listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .filter { !it && !uiState.isPlaying } // Only fire when scroll stops AND we are paused.
+            .collect {
+                // If we just paused, the scroll that just finished was from playback.
+                // We ignore it once to prevent a time jump, then reset the flag.
+                if (justPaused.value) {
+                    justPaused.value = false
+                    return@collect
+                }
+
+                val layoutInfo = listState.layoutInfo
+                if (layoutInfo.visibleItemsInfo.isEmpty()) return@collect
+
+                val viewportCenter = layoutInfo.viewportSize.height / 2
+                val centerItem = layoutInfo.visibleItemsInfo
+                    .minByOrNull { abs(it.offset + it.size / 2 - viewportCenter) }
+
+                centerItem?.let {
+                    val subtitleIndex = it.index - 1
+                    if (subtitleIndex in uiState.subtitles.indices) {
+                        viewModel.onSubtitleSelected(uiState.subtitles[subtitleIndex].startTimeMs)
+                    }
+                }
+            }
+    }
 
     // This effect handles programmatic scrolling ONLY during playback.
     LaunchedEffect(uiState.visibleSubtitle, uiState.isPlaying) {
         if (uiState.isPlaying) {
             uiState.visibleSubtitle?.let {
                 val index = uiState.subtitles.indexOf(it)
-                if (index != -1) {
+                if (index != -1 && !listState.isScrollInProgress) {
                     listState.animateScrollToItem(index + 1)
                 }
             }
@@ -95,15 +127,12 @@ fun MainScreen(
             }
         },
     ) { innerPadding ->
-        // The root Box for our layout
         Box(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
             // LAYER 1: The Tappable Background
-            // This Box fills the entire screen and ONLY listens for taps.
-            // It will ignore drag gestures, allowing them to pass through to content on top.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -112,22 +141,18 @@ fun MainScreen(
                     }
             )
 
-            // LAYER 2: The UI Content, placed on TOP of the tappable background
+            // LAYER 2: The UI Content
             if (uiState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (uiState.subtitles.isNotEmpty()) {
                 val rollHeight = 600.dp
-
-                // The SubtitleRoll is now free to receive all scroll gestures.
                 SubtitleRoll(
                     modifier = Modifier
                         .height(rollHeight)
                         .align(Alignment.Center),
                     listState = listState,
                     subtitles = uiState.subtitles,
-                    visibleSubtitle = uiState.visibleSubtitle,
                     height = rollHeight,
-                    flingBehavior = flingBehavior,
                     isPlaying = uiState.isPlaying
                 )
 
@@ -168,4 +193,4 @@ fun MainScreen(
             }
         }
     }
-}
+}T

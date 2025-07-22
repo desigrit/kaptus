@@ -2,7 +2,6 @@
 
 package com.example.kaptus.ui.composables
 
-import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -12,6 +11,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -23,25 +25,38 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kaptus.data.SubtitleEntry
+import kotlin.math.abs
 
 @Composable
 fun SubtitleRoll(
     modifier: Modifier = Modifier,
     listState: LazyListState,
     subtitles: List<SubtitleEntry>,
-    visibleSubtitle: SubtitleEntry?,
     height: Dp,
-    flingBehavior: FlingBehavior,
     isPlaying: Boolean
 ) {
-    val currentSubtitleIndex = subtitles.indexOf(visibleSubtitle)
+    // This logic, which was removed, is the key to the real-time scrolling feel.
+    // It calculates the visual center based on the list's scroll position.
+    val centerIndex by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            if (layoutInfo.visibleItemsInfo.isEmpty()) {
+                -1
+            } else {
+                val viewportCenter = layoutInfo.viewportSize.height / 2
+                val centerItem = layoutInfo.visibleItemsInfo
+                    .minByOrNull { abs(it.offset + it.size / 2 - viewportCenter) }
+                centerItem?.index ?: -1
+            }
+        }
+    }
+
     val spacerHeight = height / 2
 
     LazyColumn(
         state = listState,
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        flingBehavior = flingBehavior,
         userScrollEnabled = !isPlaying
     ) {
         item { Spacer(modifier = Modifier.height(spacerHeight)) }
@@ -52,11 +67,13 @@ fun SubtitleRoll(
             val color: Color
             val fontSize: TextUnit
 
+            // The visual style is now based on the calculated geometric center.
+            val listIndex = index + 1 // Account for top spacer
             when {
-                index == currentSubtitleIndex -> {
+                listIndex == centerIndex -> {
                     scale = 1f; alpha = 1f; color = MaterialTheme.colorScheme.onSurface; fontSize = 24.sp
                 }
-                kotlin.math.abs(index - currentSubtitleIndex) == 1 -> {
+                abs(listIndex - centerIndex) == 1 -> {
                     scale = 0.85f; alpha = 0.6f; color = MaterialTheme.colorScheme.onSurfaceVariant; fontSize = 16.sp
                 }
                 else -> {
