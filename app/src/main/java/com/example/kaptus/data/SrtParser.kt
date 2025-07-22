@@ -14,42 +14,54 @@ class SrtParser {
     }
 
     fun parse(inputStream: InputStream): List<SubtitleEntry> {
+        // First, read the whole file and normalize all different kinds of newlines to one standard (\n)
         val srtContent = inputStream.bufferedReader().use { it.readText() }
+            .replace("\r\n", "\n").replace("\r", "\n")
+
         val subtitles = mutableListOf<SubtitleEntry>()
-        val blocks = srtContent.trim().split("\\r?\\n\\s*\\r?\\n".toRegex())
+        // Split the file into blocks based on one or more empty lines
+        val blocks = srtContent.trim().split(Regex("\n\n+"))
+
+        // This regex will find and remove any HTML tag (e.g., <font>, </u>, <i>)
+        val htmlTagRegex = Regex("<.*?>")
 
         for (block in blocks) {
             if (block.isBlank()) continue
 
-            val lines = block.trim().split("\\r?\\n".toRegex())
-            if (lines.size < 3) continue
+            val lines = block.split("\n")
+            if (lines.isEmpty()) continue
 
             try {
-                val index = lines[0].trim().toIntOrNull() ?: continue
-                val matcher = TIMESTAMP_PATTERN.matcher(lines[1].trim())
-                if (!matcher.matches()) continue
+                // Find the line that contains the timestamp ("-->")
+                val timestampLineIndex = lines.indexOfFirst { "-->" in it }
+                if (timestampLineIndex == -1) continue // Skip block if no timestamp is found
 
-                val startTime = parseTimeToMilliseconds(
-                    matcher.group(1)!!.toInt(),
-                    matcher.group(2)!!.toInt(),
-                    matcher.group(3)!!.toInt(),
-                    matcher.group(4)!!.toInt()
-                )
+                val timestampLine = lines[timestampLineIndex]
+                val matcher = TIMESTAMP_PATTERN.matcher(timestampLine)
+                if (!matcher.matches()) continue // Skip if the line isn't a valid timestamp
 
-                val endTime = parseTimeToMilliseconds(
-                    matcher.group(5)!!.toInt(),
-                    matcher.group(6)!!.toInt(),
-                    matcher.group(7)!!.toInt(),
-                    matcher.group(8)!!.toInt()
-                )
+                // The index is the line right before the timestamp, if it exists and is a number.
+                val index = lines.getOrNull(timestampLineIndex - 1)?.trim()?.toIntOrNull() ?: -1
 
-                val text = lines.drop(2).joinToString("\n").trim()
+                // The text is all the lines after the timestamp. Then, remove HTML tags.
+                val text = lines.drop(timestampLineIndex + 1)
+                    .joinToString("\n")
+                    .replace(htmlTagRegex, "") // Remove HTML tags
+                    .trim()
 
                 if (text.isNotEmpty()) {
+                    val startTime = parseTimeToMilliseconds(
+                        matcher.group(1)!!.toInt(), matcher.group(2)!!.toInt(),
+                        matcher.group(3)!!.toInt(), matcher.group(4)!!.toInt()
+                    )
+                    val endTime = parseTimeToMilliseconds(
+                        matcher.group(5)!!.toInt(), matcher.group(6)!!.toInt(),
+                        matcher.group(7)!!.toInt(), matcher.group(8)!!.toInt()
+                    )
                     subtitles.add(SubtitleEntry(index, startTime, endTime, text))
                 }
-
             } catch (e: Exception) {
+                // Ignore any malformed blocks and continue
                 continue
             }
         }

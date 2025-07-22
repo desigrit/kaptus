@@ -95,6 +95,58 @@ class PlaybackViewModel : ViewModel() {
     }
 
     //================================================================================
+    // Search Events - Called by the UI
+    //================================================================================
+
+    fun onSearchActiveChange(isActive: Boolean) {
+        uiState = uiState.copy(isSearchActive = isActive)
+        // Clear search query when the search bar is closed
+        if (!isActive) {
+            onSearchQueryChange("")
+        }
+    }
+
+    fun onSearchQueryChange(query: String) {
+        val results = if (query.isNotBlank()) {
+            uiState.subtitles.mapIndexedNotNull { index, subtitle ->
+                if (subtitle.text.contains(query, ignoreCase = true)) index else null
+            }
+        } else {
+            emptyList()
+        }
+        val newIndex = if (results.isNotEmpty()) 0 else -1
+
+        uiState = uiState.copy(
+            searchQuery = query,
+            searchResults = results,
+            currentSearchResultIndex = newIndex
+        )
+
+        // If there are results, jump to the first one
+        if (newIndex != -1) {
+            val jumpTime = uiState.subtitles[results[newIndex]].startTimeMs
+            updateTime(jumpTime)
+        }
+    }
+
+    fun goToNextResult() {
+        if (uiState.searchResults.isEmpty()) return
+        val nextIndex = (uiState.currentSearchResultIndex + 1) % uiState.searchResults.size
+        val jumpTime = uiState.subtitles[uiState.searchResults[nextIndex]].startTimeMs
+        updateTime(jumpTime)
+        uiState = uiState.copy(currentSearchResultIndex = nextIndex)
+    }
+
+    fun goToPreviousResult() {
+        if (uiState.searchResults.isEmpty()) return
+        val prevIndex = (uiState.currentSearchResultIndex - 1 + uiState.searchResults.size) % uiState.searchResults.size
+        val jumpTime = uiState.subtitles[uiState.searchResults[prevIndex]].startTimeMs
+        updateTime(jumpTime)
+        uiState = uiState.copy(currentSearchResultIndex = prevIndex)
+    }
+
+
+    //================================================================================
     // Private Logic
     //================================================================================
 
@@ -124,22 +176,31 @@ class PlaybackViewModel : ViewModel() {
     }
 
     private fun updateTime(newTime: Long) {
-        val currentSubtitle = uiState.subtitles.find { it.isActiveAt(newTime) }
+        val activeSubtitle = uiState.subtitles.find { it.isActiveAt(newTime) }
+
+        // This is the key change:
+        // If there's an active subtitle, it's the one we show.
+        // If not, we keep showing the *previous* one instead of going blank.
+        val subtitleToShow = activeSubtitle ?: uiState.visibleSubtitle
+
         uiState = uiState.copy(
             currentTimeMs = newTime,
             sliderPosition = newTime.toFloat(),
-            currentSubtitle = currentSubtitle
+            currentSubtitle = activeSubtitle,
+            visibleSubtitle = subtitleToShow // Update the new state property
         )
     }
 
     private fun resetPlayback() {
         stopPlaybackLoop()
+        val firstSubtitle = uiState.subtitles.firstOrNull()
         uiState = uiState.copy(
             currentTimeMs = 0L,
             sliderPosition = 0f,
             isPlaying = false,
             isDraggingSlider = false,
-            currentSubtitle = uiState.subtitles.firstOrNull()
+            currentSubtitle = firstSubtitle,
+            visibleSubtitle = firstSubtitle // Ensure the first subtitle is visible on load
         )
     }
 }
@@ -156,5 +217,10 @@ data class UiState(
     val errorMessage: String? = null,
     val isDraggingSlider: Boolean = false,
     val currentSubtitle: SubtitleEntry? = null,
-    // Add Search State here if needed
+    val visibleSubtitle: SubtitleEntry? = null,
+    // --- Add all the search state here ---
+    val isSearchActive: Boolean = false,
+    val searchQuery: String = "",
+    val searchResults: List<Int> = emptyList(),
+    val currentSearchResultIndex: Int = -1
 )
