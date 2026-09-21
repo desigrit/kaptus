@@ -12,12 +12,18 @@ interface OpenSubtitlesApi {
     @GET("api/v1/features")
     suspend fun searchFeatures(
         @Query("query") query: String,
-        @Query("type") type: String = "movie"
+        @Query("type") type: String? = null
     ): FeatureResponse
 
     @GET("api/v1/subtitles")
     suspend fun searchSubtitles(
         @Query("imdb_id") imdbId: Long? = null,
+        @Query("tmdb_id") tmdbId: Long? = null,
+        @Query("parent_feature_id") parentFeatureId: Long? = null,
+        @Query("parent_imdb_id") parentImdbId: Long? = null,
+        @Query("parent_tmdb_id") parentTmdbId: Long? = null,
+        @Query("season_number") seasonNumber: Int? = null,
+        @Query("episode_number") episodeNumber: Int? = null,
         @Query("languages") languages: String = "en",
         @Query("query") query: String? = null,
         @Query("type") type: String = "movie"

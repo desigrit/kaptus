@@ -27,9 +27,12 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,6 +75,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.kaptus.R
 import com.example.kaptus.data.MovieCandidate
+import com.example.kaptus.data.MediaType
 import com.example.kaptus.ui.theme.KaptusTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -178,7 +182,8 @@ fun MovieSearchScreen(
                                         focus.clearFocus()
                                         selectedMovieId = movie.id.takeUnless { it == selectedMovieId }
                                     },
-                                    onSelect = { onSelectMovie(movie) }, onPrepare = { onPrepareForTheater(movie) }
+                                    onSelect = onSelectMovie,
+                                    onPrepare = onPrepareForTheater
                                 )
                             }
                         }
@@ -216,8 +221,17 @@ private fun SearchError(message: String, onRetry: () -> Unit, onSettings: () -> 
 }
 
 @Composable
-private fun MovieResultRow(movie: MovieCandidate, expanded: Boolean, onExpand: () -> Unit, onSelect: () -> Unit, onPrepare: () -> Unit) {
+private fun MovieResultRow(
+    movie: MovieCandidate,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onSelect: (MovieCandidate) -> Unit,
+    onPrepare: (MovieCandidate) -> Unit
+) {
     val expansionDescription = stringResource(if (expanded) R.string.discovery_movie_expanded else R.string.discovery_movie_collapsed)
+    var season by rememberSaveable(movie.id) { mutableStateOf(1) }
+    var episode by rememberSaveable(movie.id) { mutableStateOf(1) }
+    val selection = if (movie.mediaType == MediaType.TvShow) movie.episode(season, episode) else movie
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer) {
         Column {
             ListItem(
@@ -228,7 +242,13 @@ private fun MovieResultRow(movie: MovieCandidate, expanded: Boolean, onExpand: (
                 },
                 leadingContent = {
                     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.size(48.dp)) {
-                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (movie.mediaType == MediaType.TvShow) Icons.Outlined.Tv else Icons.Outlined.Movie,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 trailingContent = { Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -238,15 +258,66 @@ private fun MovieResultRow(movie: MovieCandidate, expanded: Boolean, onExpand: (
                 Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(bottom = 8.dp))
                     Text(stringResource(R.string.discovery_best_captions), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = onSelect, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)) {
+                    if (movie.mediaType == MediaType.TvShow) {
+                        Text(
+                            stringResource(R.string.choose_episode),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            EpisodeNumberPicker(
+                                label = stringResource(R.string.season),
+                                value = season,
+                                onValueChange = { season = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                            EpisodeNumberPicker(
+                                label = stringResource(R.string.episode),
+                                value = episode,
+                                onValueChange = { episode = it },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    Button(onClick = { onSelect(selection) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)) {
                         Text(stringResource(R.string.start_listening))
                     }
-                    TextButton(onClick = onPrepare, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    TextButton(onClick = { onPrepare(selection) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         Icon(Icons.Outlined.CloudDownload, contentDescription = null)
                         Spacer(Modifier.size(8.dp))
                         Text(stringResource(R.string.prepare_offline))
                     }
                     Text(stringResource(R.string.theater_quota_cost), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeNumberPicker(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                IconButton(
+                    onClick = { onValueChange((value - 1).coerceAtLeast(1)) },
+                    enabled = value > 1,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Outlined.Remove, contentDescription = stringResource(R.string.decrease_value, label))
+                }
+                Text(value.toString(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.widthIn(min = 28.dp))
+                IconButton(
+                    onClick = { onValueChange((value + 1).coerceAtMost(99)) },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.increase_value, label))
                 }
             }
         }

@@ -27,6 +27,7 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.kaptus.PlayerUiState
 import com.example.kaptus.data.MovieCandidate
+import com.example.kaptus.data.MediaType
 import com.example.kaptus.data.PreparedMovie
 import com.example.kaptus.data.SubtitleEntry
 import com.example.kaptus.data.settings.AppSettings
@@ -69,7 +70,7 @@ class CinemaUiTest {
         }
 
         compose.onNodeWithText("Connect OpenSubtitles").assertIsDisplayed()
-        compose.onNodeWithText("Find a movie").assertIsDisplayed()
+        compose.onNodeWithText("Find a movie or TV show").assertIsDisplayed()
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Arrival · 2016"))
         compose.onNodeWithText("Arrival · 2016").assertIsDisplayed()
         compose.onNodeWithText("3 caption tracks offline").assertIsDisplayed()
@@ -100,6 +101,45 @@ class CinemaUiTest {
         compose.onNodeWithText("2016").assertIsDisplayed()
         compose.onNodeWithTag("movie_result_42").performScrollTo().performClick()
         compose.onNodeWithText("Prepare for theater").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun tvSearchLetsTheViewerChooseAnEpisode() {
+        var selected: MovieCandidate? = null
+        compose.setContent {
+            KaptusTheme {
+                MovieSearchScreen(
+                    query = "Severance",
+                    results = listOf(
+                        MovieCandidate(
+                            "9001", "Severance", 2022, 11280740, 95396,
+                            mediaType = MediaType.TvShow
+                        )
+                    ),
+                    isSearching = false,
+                    error = null,
+                    providerConfigured = true,
+                    onBack = {},
+                    onOpenSettings = {},
+                    onQueryChange = {},
+                    onSelectMovie = { selected = it },
+                    onPrepareForTheater = {}
+                )
+            }
+        }
+
+        compose.onNodeWithTag("movie_result_9001").performClick()
+        compose.onNodeWithText("Choose an episode").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Increase Season").performClick()
+        compose.onNodeWithContentDescription("Increase Episode").performClick()
+        compose.onNodeWithText("Start listening").performScrollTo().performClick()
+
+        compose.runOnIdle {
+            assertEquals(MediaType.Episode, selected?.mediaType)
+            assertEquals(2, selected?.seasonNumber)
+            assertEquals(2, selected?.episodeNumber)
+            assertEquals("Severance · S02E02", selected?.title)
+        }
     }
 
     @Test
@@ -151,7 +191,7 @@ class CinemaUiTest {
             }
         }
 
-        compose.onNodeWithText("Find a movie").assertIsDisplayed()
+        compose.onNodeWithText("Find a movie or TV show").assertIsDisplayed()
         compose.onNodeWithText("Open SRT file").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("History").performScrollTo().assertIsDisplayed()
     }

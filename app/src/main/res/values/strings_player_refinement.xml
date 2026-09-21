@@ -4,13 +4,13 @@
     <string name="player_screen_brightness">Screen brightness</string>
     <string name="player_theater_dim">Dim for the theater</string>
     <string name="player_brightness_restored">Your previous screen brightness returns when you leave the player.</string>
-    <string name="player_timeline">Movie position</string>
+    <string name="player_timeline">Playback position</string>
     <string name="player_timeline_position">%1$s of %2$s</string>
     <string name="player_paused">Paused</string>
     <string name="sync_hearing_dialogue">Hearing dialogue</string>
     <string name="sync_transcribing">Transcribing dialogue</string>
     <string name="sync_comparing_captions">Comparing with captions</string>
-    <string name="sync_hearing_detail">Keep the phone near the movie audio. One or two clear lines should be enough.</string>
+    <string name="sync_hearing_detail">Keep the phone near the audio. One or two clear lines should be enough.</string>
     <string name="sync_transcribing_detail">Turning the latest dialogue into words on this phone.</string>
     <string name="sync_comparing_detail">Searching this caption track for the words Kaptus heard.</string>
     <string name="player_caption_preview">Every word brings you closer.</string>

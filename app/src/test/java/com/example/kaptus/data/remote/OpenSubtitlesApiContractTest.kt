@@ -58,7 +58,28 @@ class OpenSubtitlesApiContractTest {
 
         assertEquals("Arrival", response.data.single().attributes.title)
         assertEquals("2016", response.data.single().attributes.year?.toString())
-        assertEquals("/api/v1/features?query=Arrival%202016&type=movie", request.path)
+        assertEquals("/api/v1/features?query=Arrival%202016", request.path)
+    }
+
+    @Test
+    fun requestsCaptionsForASpecificTvEpisode() = runTest {
+        server.enqueue(jsonResponse("""{"data":[]}"""))
+
+        api.searchSubtitles(
+            parentFeatureId = 9001,
+            parentImdbId = 123456,
+            seasonNumber = 2,
+            episodeNumber = 4,
+            type = "episode"
+        )
+        val path = server.takeRequest().requestUrl!!
+
+        assertEquals("9001", path.queryParameter("parent_feature_id"))
+        assertEquals("123456", path.queryParameter("parent_imdb_id"))
+        assertEquals("2", path.queryParameter("season_number"))
+        assertEquals("4", path.queryParameter("episode_number"))
+        assertEquals("episode", path.queryParameter("type"))
+        assertEquals("en", path.queryParameter("languages"))
     }
 
     @Test

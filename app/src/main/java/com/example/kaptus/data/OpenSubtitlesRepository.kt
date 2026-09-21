@@ -39,16 +39,22 @@ class OpenSubtitlesRepository(
         providerRequest { service.api.searchFeatures(query.trim()) }.data
             .filter { it.attributes.title.isNotBlank() }
             .filter {
-                it.attributes.featureType.isBlank() ||
-                    it.attributes.featureType.equals("movie", ignoreCase = true)
+                it.attributes.featureType.isBlank() || it.attributes.featureType.lowercase() in
+                    setOf("movie", "tvshow", "tv show", "series")
             }
             .map { feature ->
+                val featureType = feature.attributes.featureType.lowercase()
                 MovieCandidate(
                     id = feature.id.jsonPrimitive.content,
                     title = feature.attributes.title,
                     year = feature.attributes.year?.jsonPrimitive?.content?.toIntOrNull(),
                     imdbId = feature.attributes.imdbId,
-                    tmdbId = feature.attributes.tmdbId
+                    tmdbId = feature.attributes.tmdbId,
+                    mediaType = if (featureType in setOf("tvshow", "tv show", "series")) {
+                        MediaType.TvShow
+                    } else {
+                        MediaType.Movie
+                    }
                 )
             }
             .distinctBy { it.id }
@@ -58,13 +64,20 @@ class OpenSubtitlesRepository(
         requireConfigured()
         movies.clear()
         movies[movie.id] = movie
-        val query = if (movie.imdbId == null) {
+        val query = if (movie.imdbId == null && movie.mediaType == MediaType.Movie) {
             listOfNotNull(movie.title, movie.year?.toString()).joinToString(" ")
         } else null
         val tracks = providerRequest {
             service.api.searchSubtitles(
                 imdbId = movie.imdbId,
-                query = query
+                tmdbId = movie.tmdbId,
+                parentFeatureId = movie.parentFeatureId,
+                parentImdbId = movie.parentImdbId,
+                parentTmdbId = movie.parentTmdbId,
+                seasonNumber = movie.seasonNumber,
+                episodeNumber = movie.episodeNumber,
+                query = query,
+                type = if (movie.mediaType == MediaType.Episode) "episode" else "movie"
             )
         }.data.mapNotNull { subtitle ->
             val file = subtitle.attributes.files.firstOrNull() ?: return@mapNotNull null

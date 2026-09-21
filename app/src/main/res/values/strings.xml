@@ -1,19 +1,19 @@
 <resources>
     <string name="app_name">Kaptus</string>
-    <string name="app_tagline">Captions that meet you where the movie is.</string>
-    <string name="find_movie">Find a movie</string>
+    <string name="app_tagline">Captions that meet you where the story is.</string>
+    <string name="find_movie">Find a movie or TV show</string>
     <string name="open_srt">Open SRT file</string>
     <string name="settings">Settings</string>
     <string name="settings_needed">Add an OpenSubtitles API key to search and download captions.</string>
     <string name="open_settings">Open settings</string>
     <string name="prepared_movies">History</string>
-    <string name="no_prepared_movies">Movies prepared for offline use will appear here.</string>
+    <string name="no_prepared_movies">Movies and episodes prepared for offline use will appear here.</string>
     <plurals name="offline_tracks">
         <item quantity="one">%1$d caption track offline</item>
         <item quantity="other">%1$d caption tracks offline</item>
     </plurals>
-    <string name="search_movies">Search movies</string>
-    <string name="movie_title_hint">Movie title or title and year</string>
+    <string name="search_movies">Search movies and TV shows</string>
+    <string name="movie_title_hint">Movie or TV show title</string>
     <string name="year_unknown">Year unavailable</string>
     <string name="searching">Searching…</string>
     <string name="start_listening">Start listening</string>
@@ -72,9 +72,9 @@
     <string name="sync_error_no_match">Kaptus could not find a unique match in that dialogue. Wait for a clear line, then tap Resync.</string>
     <string name="sync_error_microphone">Microphone access is needed for automatic synchronization.</string>
     <string name="sync_error_recognizer">Listening could not start. Check microphone access and try again.</string>
-    <string name="search_no_movies">No movies found. Try adding the release year.</string>
+    <string name="search_no_movies">No movies or TV shows found. Check the title or add the release year.</string>
     <string name="preparation_finding_captions">Finding English SDH captions…</string>
-    <string name="error_no_complete_captions">No complete English captions were found for this movie.</string>
+    <string name="error_no_complete_captions">No complete English captions were found for this title.</string>
     <string name="preparation_caption_progress">Preparing caption %1$d of %2$d…</string>
     <string name="preparation_downloading_best">Downloading the best caption track…</string>
     <string name="error_caption_downloads_failed">The caption tracks were found but could not be downloaded.</string>
@@ -84,7 +84,7 @@
         <item quantity="one">Prepared for theater: %1$d caption track available offline.</item>
         <item quantity="other">Prepared for theater: %1$d caption tracks available offline.</item>
     </plurals>
-    <string name="captions_ready_notice">Captions are ready. Start listening when the movie is playing.</string>
+    <string name="captions_ready_notice">Captions are ready. Start listening when your movie or episode is playing.</string>
     <string name="preparation_opening_captions">Opening downloaded captions…</string>
     <string name="error_downloaded_caption_missing">The downloaded caption file is missing.</string>
     <string name="preparation_reading_srt">Reading the SRT file…</string>
@@ -98,12 +98,17 @@
     <string name="trying_alternative_caption">Trying another caption track for this cut…</string>
     <string name="error_no_remaining_caption">No remaining caption track could be prepared. Choose another result or open an SRT file.</string>
     <string name="error_generic">Something went wrong. Please try again.</string>
-    <string name="error_movie_metadata_unavailable">The selected movie metadata is unavailable. Search for the movie again.</string>
+    <string name="error_movie_metadata_unavailable">The selected title is unavailable. Search for it again.</string>
+    <string name="choose_episode">Choose an episode</string>
+    <string name="season">Season</string>
+    <string name="episode">Episode</string>
+    <string name="decrease_value">Decrease %1$s</string>
+    <string name="increase_value">Increase %1$s</string>
     <string name="error_provider_missing_download_link">The provider did not return a download link.</string>
     <string name="error_download_empty">The downloaded subtitle was empty.</string>
     <string name="error_download_http">Subtitle download failed (%1$d).</string>
     <string name="error_download_unreadable">The downloaded file did not contain readable captions.</string>
-    <string name="error_prepared_movie_unavailable">This prepared movie is no longer available.</string>
+    <string name="error_prepared_movie_unavailable">This prepared title is no longer available.</string>
     <string name="error_provider_not_configured">Add your OpenSubtitles API key in Settings first.</string>
     <string name="error_provider_missing_token">OpenSubtitles login did not return a session token.</string>
     <string name="error_provider_offline">Kaptus appears to be offline. Check the connection and retry.</string>

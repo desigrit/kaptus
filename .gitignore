@@ -2,6 +2,7 @@
 .gradle/
 build/
 /gradle/gradle-daemon-jvm.properties
+/docs/images/raw/
 
 # Local configuration file (sdk path, etc)
 local.properties

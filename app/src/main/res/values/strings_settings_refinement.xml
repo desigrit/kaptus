@@ -1,5 +1,5 @@
 <resources>
-    <string name="settings_appearance_description">Settle on a comfortable size and brightness before the movie starts.</string>
+    <string name="settings_appearance_description">Settle on a comfortable size and brightness before playback starts.</string>
     <string name="settings_caption_preview">Caption preview</string>
     <string name="settings_caption_preview_text">Every moment\nhas a story.</string>
     <string name="settings_size_description">Your phone\'s font size setting also applies.</string>

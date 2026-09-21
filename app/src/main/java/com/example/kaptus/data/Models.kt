@@ -5,8 +5,33 @@ data class MovieCandidate(
     val title: String,
     val year: Int?,
     val imdbId: Long?,
-    val tmdbId: Long?
-)
+    val tmdbId: Long?,
+    val mediaType: MediaType = MediaType.Movie,
+    val parentFeatureId: Long? = null,
+    val parentImdbId: Long? = null,
+    val parentTmdbId: Long? = null,
+    val seasonNumber: Int? = null,
+    val episodeNumber: Int? = null
+) {
+    fun episode(season: Int, episode: Int): MovieCandidate = copy(
+        id = "$id-s${season}e$episode",
+        title = "$title · S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}",
+        imdbId = null,
+        tmdbId = null,
+        mediaType = MediaType.Episode,
+        parentFeatureId = id.toLongOrNull(),
+        parentImdbId = imdbId,
+        parentTmdbId = tmdbId,
+        seasonNumber = season,
+        episodeNumber = episode
+    )
+}
+
+enum class MediaType {
+    Movie,
+    TvShow,
+    Episode
+}
 
 data class CaptionTrack(
     val subtitleId: String,

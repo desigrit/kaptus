@@ -1,10 +1,21 @@
 # Kaptus
 
-**Companion captions that can find their place in a movie.**
+**Companion captions that can find their place in a movie or TV episode.**
 
-Kaptus is an Android app for the moments when a movie does not have usable captions. Choose the movie you are watching, let Kaptus listen to a short stretch of dialogue, and it will find the matching line in the subtitle track. Once it is synchronized, the microphone turns off and the captions continue on a calm, cinema-friendly screen.
+Kaptus is an Android app for the moments when a movie or TV show does not have usable captions. Choose what you are watching, let Kaptus listen to a short stretch of dialogue, and it will find the matching line in the subtitle track. Once it is synchronized, the microphone turns off and the captions continue on a calm, cinema-friendly screen.
 
-Kaptus is an early preview made with hard-of-hearing moviegoers in mind. It currently supports English movie audio and English captions on Android 13 or newer.
+Kaptus is an early preview made with hard-of-hearing viewers in mind. It currently supports English audio and English captions on Android 13 or newer.
+
+<p align="center">
+  <img src="docs/images/kaptus-player-portrait.png" alt="Kaptus showing synchronized captions for Dune: Part Two in a Pixel 10 Pro-style frame" width="42%" />
+  <img src="docs/images/kaptus-settings.png" alt="Kaptus caption appearance and OpenSubtitles settings in a Pixel 10 Pro-style frame" width="42%" />
+</p>
+
+<p align="center">
+  <img src="docs/images/kaptus-player-landscape.png" alt="Kaptus showing synchronized captions in landscape mode in a Pixel 10 Pro-style frame" width="88%" />
+</p>
+
+<p align="center"><sub>The Dune: Part Two caption shown here is illustrative and is not dialogue from the film.</sub></p>
 
 ## Download Kaptus
 
@@ -22,15 +33,15 @@ Kaptus gives you two ways to begin:
 
 Choose **Open SRT file** to pick a caption file from your phone or a connected cloud-storage provider. This path works without an OpenSubtitles account or an internet connection.
 
-### Find a movie
+### Find a movie or TV show
 
-Choose **Find a movie**, search by title and year, and select the correct film. Kaptus ranks complete English captions, prefers SDH tracks, and downloads the best match.
+Choose **Find a movie or TV show**, search by title, and select the correct result. For a TV show, choose the season and episode. Kaptus ranks complete English captions, prefers SDH tracks, and downloads the best match.
 
-The first time you use movie search, Kaptus asks for an OpenSubtitles API key.
+The first time you use search, Kaptus asks for an OpenSubtitles API key.
 
 ## Get an OpenSubtitles API key
 
-The current personal preview uses a key from your own OpenSubtitles account:
+Kaptus uses a bring-your-own-key setup. Each person connects their own OpenSubtitles account and uses their own download allowance:
 
 1. Create an account or sign in at [OpenSubtitles.com](https://www.opensubtitles.com/).
 2. Open your profile and choose **API Consumers**.
@@ -41,13 +52,11 @@ The current personal preview uses a key from your own OpenSubtitles account:
 
 OpenSubtitles provides more background in its [REST API getting-started guide](https://opensubtitles.stoplight.io/docs/opensubtitles-api/e3750fd63a100-getting-started).
 
-Keep your API key private. Kaptus encrypts it with Android Keystore and keeps it on your phone. No API key is included in this repository.
+Keep your API key private. Kaptus encrypts it with Android Keystore and keeps it on your phone. No shared API key is included in the app or this repository. Your access and download allowance remain connected to your own OpenSubtitles account.
 
-[OpenSubtitles currently advises](https://forum.opensubtitles.com/t/apikey-for-player-video/7998/2) publicly distributed apps to use an app-owned API key. The personal-key setup above is intended for this early testing release and will be replaced before Kaptus reaches Google Play.
+## Watching with Kaptus
 
-## Watching a movie
-
-1. Start the movie and open its prepared captions in Kaptus.
+1. Start the movie or episode and open its prepared captions in Kaptus.
 2. Grant microphone access and let a clear line of dialogue play.
 3. Kaptus listens briefly, transcribes on your phone, and searches the subtitle text for that phrase.
 4. When **Synced** appears, the microphone stops and the caption clock continues on its own.
@@ -57,9 +66,9 @@ You can pause captions, move along the timeline, adjust timing in half-second st
 
 ## Prepare before you go
 
-Choose **Prepare for theater** while you are online to save up to three ranked caption tracks. The speech model is bundled with the app, so a prepared movie can synchronize without a network connection.
+Choose **Prepare for theater** while you are online to save up to three ranked caption tracks. The speech model is bundled with the app, so a prepared movie or episode can synchronize without a network connection.
 
-For the best result, choose the exact movie and year, place the phone where it can hear the room audio clearly, and start synchronization during spoken dialogue. Alternate cuts can use different timing or dialogue, so Resync or another caption track may be needed.
+For the best result, choose the exact movie and year or the correct TV episode, place the phone where it can hear the room audio clearly, and start synchronization during spoken dialogue. Alternate cuts can use different timing or dialogue, so Resync or another caption track may be needed.
 
 ## Privacy
 
@@ -87,16 +96,16 @@ Debug builds support `arm64-v8a` phones and `x86_64` emulators. Release builds c
 
 Kaptus records overlapping six-second windows while it is finding the current scene. Recognition runs in a latest-only queue, so old audio never builds up behind the current dialogue. A normalized copy of the transcript is matched against a token index built from the subtitle file. Case, punctuation, apostrophe style, formatting tags, speaker labels, and bracketed sound descriptions are ignored during matching.
 
-When Kaptus finds a unique phrase, it uses the audio capture time to compensate for transcription delay and starts the caption clock at the estimated movie position. The original SRT text remains untouched for display.
+When Kaptus finds a unique phrase, it uses the audio capture time to compensate for transcription delay and starts the caption clock at the estimated playback position. The original SRT text remains untouched for display.
 
 ## Current scope
 
-- English movie audio and English captions
-- User-selected movie title and year
+- English audio and English captions
+- User-selected movie or TV show, with season and episode selection
 - Local SRT files or OpenSubtitles caption tracks
 - Android 13 or newer
 - On-device scene matching
 
-Kaptus does not identify an unknown movie from audio and does not generate captions when a subtitle track is missing.
+Kaptus does not identify an unknown title from audio and does not generate captions when a subtitle track is missing.
 
 If you try the preview, feedback about synchronization speed, timing, readability, and theater use is especially welcome.
