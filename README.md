@@ -21,9 +21,11 @@ Kaptus is an early preview made with hard-of-hearing viewers in mind. It current
 
 **[Download the latest Kaptus APK](https://github.com/desigrit/kaptus/releases/latest/download/Kaptus-preview.apk)**
 
-This is a preview build distributed through GitHub. After downloading it, open the APK on your phone and follow Android's prompt to allow installation from your browser or Files app.
+This is a debug-signed preview build for testing, distributed through GitHub. The download is about 129 MB because it includes the on-device English speech model. After downloading it, open the APK on your phone and follow Android's prompt to allow installation from your browser or Files app.
 
-**A Google Play listing is coming soon.**
+See the [latest release page](https://github.com/desigrit/kaptus/releases/latest) for the version, file size, and SHA-256 checksum.
+
+**A Google Play listing is planned.**
 
 ## Getting started
 
@@ -46,9 +48,10 @@ Kaptus uses a bring-your-own-key setup. Each person connects their own OpenSubti
 1. Create an account or sign in at [OpenSubtitles.com](https://www.opensubtitles.com/).
 2. Open your profile and choose **API Consumers**.
 3. Create a consumer with a unique alphanumeric name, such as `KaptusPersonal`.
-4. Add a short description, such as `Personal use with Kaptus`, then save it.
-5. Copy the generated API key.
-6. In Kaptus, open **Settings**, paste the key, and tap **Save**. Your OpenSubtitles username and password are optional.
+4. Add a short description, such as `Personal use with Kaptus`.
+5. Keep **Allow anonymous downloads** selected if you want to use the API key without entering your OpenSubtitles username and password, then save the consumer.
+6. Copy the generated API key.
+7. In Kaptus, open **Settings**, paste the key, and tap **Save**. Account credentials are optional when anonymous downloads are enabled for your consumer.
 
 OpenSubtitles provides more background in its [REST API getting-started guide](https://opensubtitles.stoplight.io/docs/opensubtitles-api/e3750fd63a100-getting-started).
 
@@ -58,11 +61,13 @@ Keep your API key private. Kaptus encrypts it with Android Keystore and keeps it
 
 1. Start the movie or episode and open its prepared captions in Kaptus.
 2. Grant microphone access and let a clear line of dialogue play.
-3. Kaptus listens briefly, transcribes on your phone, and searches the subtitle text for that phrase.
+3. Kaptus listens to overlapping six-second windows, transcribes on your phone, and searches the subtitle text for that phrase.
 4. When **Synced** appears, the microphone stops and the caption clock continues on its own.
 5. Tap anywhere to reveal playback controls. Use **Resync** whenever you need Kaptus to listen again.
 
 You can pause captions, move along the timeline, adjust timing in half-second steps, change text size and brightness, or lock the screen orientation. Manual timeline changes never turn the microphone back on.
+
+Each synchronization attempt stops after 30 seconds of detected dialogue if it cannot find a unique match. Clear, distinctive dialogue works best. Very short or repeated lines, music-heavy scenes, background conversations, and captions from a different cut can prevent a reliable match. Move closer to the movie audio, wait for a clearer line, and tap **Resync** to try again.
 
 ## Prepare before you go
 
