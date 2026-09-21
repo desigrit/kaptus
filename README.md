@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/brand/kaptus-icon.png" width="128" height="128" alt="Kaptus Wordbird, an ivory and orange folded bird on a teal circle" />
+  <img src="docs/brand/kaptus-icon.png" width="128" height="128" alt="Kaptus Wordbird, an ivory and yellow folded bird on a teal circle" />
 </p>
 
 # Kaptus

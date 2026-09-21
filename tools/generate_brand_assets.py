@@ -11,19 +11,21 @@ ROOT = Path(__file__).resolve().parents[1]
 BRAND = ROOT / "docs/brand"
 RES = ROOT / "app/src/main/res"
 TEAL = "#176B70"
+ACCENT_YELLOW = "#FFC857"  # Matches ui.theme.SyncAmber.
 SCALE = 0.049
-TX, TY = 22.15, 23.522
+# A 3 dp rightward optical correction gives the raised wingtip more space.
+TX, TY = 25.15, 23.522
 
 # Keep every point of the bird within Android's central 66 dp safe circle.
 # The outer 18 dp of each 108 dp adaptive layer is reserved for launcher effects.
 GRADIENTS = {
-    "tail": (280, 850, 580, 1010, [(0, "#FF982F"), (1, "#E75A12")]),
+    "tail": (280, 850, 580, 1010, [(0, "#FFD169"), (1, "#D59A2C")]),
     "body": (810, 420, 540, 1080, [(0, "#FFF9EA"), (1, "#EDE4D0")]),
-    "beak": (990, 402, 1090, 470, [(0, "#FFB044"), (1, "#FF8A24")]),
-    "beakFold": (1020, 457, 1035, 526, [(0, "#C94B08"), (1, "#F47519")]),
-    "underwing": (545, 580, 610, 765, [(0, "#AD360B"), (1, "#F27317")]),
-    "chest": (746, 596, 914, 762, [(0, "#FF9D30"), (1, "#EF6614")]),
-    "wing": (241, 199, 698, 641, [(0, "#FFA53D"), (1, "#FF811F")]),
+    "beak": (990, 402, 1090, 470, [(0, "#FFE397"), (1, ACCENT_YELLOW)]),
+    "beakFold": (1020, 457, 1035, 526, [(0, "#AF741A"), (1, "#D99C27")]),
+    "underwing": (545, 580, 610, 765, [(0, "#9D6819"), (1, "#D9A02B")]),
+    "chest": (746, 596, 914, 762, [(0, "#FFE38F"), (1, "#C98D20")]),
+    "wing": (241, 199, 698, 641, [(0, "#FFE08A"), (1, ACCENT_YELLOW)]),
 }
 
 SLOT_ONE = (
@@ -43,7 +45,7 @@ WING = (
 # Paint order follows the paper folds, from the tail to the lifted wing.
 PATHS = [
     ("tail", "M555,758 L237,938 Q230,943 241,949 L487,1047 Q591,928 555,758 Z"),
-    ("#FF9A31", "M555,758 L237,938 Q230,943 241,949 L331,989 Z"),
+    ("#FFDB79", "M555,758 L237,938 Q230,943 241,949 L331,989 Z"),
     ("body", "M720,570 C796,444 881,340 981,390 L995,512 C1005,789 839,1004 457,1097 Q431,1105 447,1085 C560,1005 602,884 555,758 Z"),
     ("beak", "M981,390 L1094,447 Q1104,452 1094,459 L997,536 L992,464 Z"),
     ("beakFold", "M992,464 L1099,451 L997,536 Z"),
