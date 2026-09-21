@@ -29,6 +29,15 @@ add_library(kaptus_whisper SHARED kaptus_whisper.cpp)
 target_include_directories(kaptus_whisper PRIVATE ${whisper_cpp_SOURCE_DIR}/include)
 target_link_libraries(kaptus_whisper PRIVATE whisper android log)
 
+# NDK r27 otherwise links our shared library with 4 KB LOAD segments. Android
+# devices with 16 KB memory pages need both the ELF segments and RELRO aligned.
+if(ANDROID)
+    target_link_options(kaptus_whisper PRIVATE
+        -Wl,-z,max-page-size=16384
+        -Wl,-z,common-page-size=16384
+    )
+endif()
+
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(kaptus_whisper PRIVATE -O3 -fvisibility=hidden -ffunction-sections -fdata-sections)
     target_link_options(kaptus_whisper PRIVATE -Wl,--gc-sections)

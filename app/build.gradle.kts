@@ -68,14 +68,14 @@ android {
         applicationId = "com.example.kaptus"
         minSdk = 33
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.1-preview"
+        versionCode = 4
+        versionName = "0.2.2-preview"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DANDROID_STL=c++_shared")
+                arguments += listOf("-DANDROID_STL=c++_static")
             }
         }
     }

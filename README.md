@@ -97,8 +97,11 @@ The build downloads pinned copies of whisper.cpp, the English Whisper model, and
 
 Debug builds support `arm64-v8a` phones and `x86_64` emulators. Release builds currently target `arm64-v8a`.
 
+The alignment check verifies 16 KB ELF LOAD segments and native library placement in the APK. The app's native speech library uses NDK r27 with explicit 16 KB linker flags.
+
 ```powershell
 ./gradlew testDebugUnitTest lintDebug assembleDebug
+python tools/check_native_load_alignment.py app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## How synchronization works
