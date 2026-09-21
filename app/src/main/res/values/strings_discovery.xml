@@ -1,0 +1,34 @@
+<resources>
+    <string name="discovery_home_title">Follow every line.</string>
+    <string name="discovery_home_description">Find your movie, then let Kaptus find your place.</string>
+    <string name="discovery_connect_provider">Connect OpenSubtitles</string>
+    <string name="discovery_connect_provider_description">For movie search and caption downloads.</string>
+    <string name="discovery_library_empty_title">Ready before the lights go down.</string>
+    <string name="discovery_library_empty_description">Find a movie and choose Prepare for theater to save its captions for offline listening.</string>
+    <string name="discovery_movie_title_year">%1$s · %2$d</string>
+    <string name="discovery_sage_title">What are you watching?</string>
+    <string name="discovery_sage_description">A few words of dialogue. The right place in your captions.</string>
+    <string name="discovery_sage_library">Ready offline</string>
+    <string name="discovery_paper_title">A place for every word.</string>
+    <string name="discovery_paper_description">Your companion for the big screen.</string>
+    <string name="discovery_paper_library">Your caption library</string>
+    <string name="discovery_blue_title">Your next showing.</string>
+    <string name="discovery_blue_description">Bring the captions. Stay with the story.</string>
+    <string name="discovery_blue_library">History</string>
+    <string name="discovery_search_hint">Movie title and year</string>
+    <string name="discovery_clear_search">Clear search</string>
+    <string name="discovery_search_setup_title">Your next movie starts here.</string>
+    <string name="discovery_search_setup_description">Connect your caption provider to search for English movie captions. You can also open an SRT file from the home screen.</string>
+    <string name="discovery_search_initial_title">What are you watching?</string>
+    <string name="discovery_search_initial_description">Search by movie title. Add the release year to find the right version.</string>
+    <string name="discovery_search_empty_title">Try another title.</string>
+    <string name="discovery_search_error_title">Search is unavailable</string>
+    <string name="discovery_provider_settings">Provider settings</string>
+    <string name="discovery_movie_expanded">Caption options shown</string>
+    <string name="discovery_movie_collapsed">Show caption options</string>
+    <string name="discovery_best_captions">Kaptus will choose the best available English captions.</string>
+    <plurals name="discovery_movie_count">
+        <item quantity="one">%1$d movie found</item>
+        <item quantity="other">%1$d movies found</item>
+    </plurals>
+</resources>

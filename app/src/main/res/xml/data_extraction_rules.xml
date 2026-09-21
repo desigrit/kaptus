@@ -5,15 +5,13 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="sharedpref" path="kaptus_secure_credentials.xml"/>
+        <exclude domain="database" path="kaptus.db"/>
+        <exclude domain="file" path="captions/"/>
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="kaptus_secure_credentials.xml"/>
+        <exclude domain="database" path="kaptus.db"/>
+        <exclude domain="file" path="captions/"/>
     </device-transfer>
-    -->
 </data-extraction-rules>

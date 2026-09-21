@@ -1,196 +1,190 @@
-// app/src/main/java/com/example/kaptus/ui/MainScreen.kt
-
 package com.example.kaptus.ui
 
-import android.app.Activity
-import android.content.pm.ActivityInfo
-import android.content.res.Configuration
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.animation.core.tween
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.kaptus.KaptusApplication
 import com.example.kaptus.PlaybackViewModel
-import com.example.kaptus.ui.composables.*
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlin.math.abs
+import com.example.kaptus.PreparationState
+import com.example.kaptus.ui.screens.HomeScreen
+import com.example.kaptus.ui.screens.MovieSearchScreen
+import com.example.kaptus.ui.screens.PlayerScreen
+import com.example.kaptus.ui.screens.SettingsScreen
+import com.example.kaptus.ui.screens.PreparationStatus
+
+private object Routes {
+    const val Home = "home"
+    const val Search = "search"
+    const val Settings = "settings"
+    const val Player = "player"
+}
 
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
-    viewModel: PlaybackViewModel = viewModel()
+    initialSrtUri: Uri? = null,
+    onInitialSrtConsumed: () -> Unit = {},
+    playbackViewModel: PlaybackViewModel = viewModel(
+        factory = PlaybackViewModel.factory(
+            (LocalContext.current.applicationContext as KaptusApplication).container
+        )
+    )
 ) {
-    val uiState by rememberUpdatedState(viewModel.uiState)
+    val state by playbackViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val orientation = LocalConfiguration.current.orientation
-    var controlsVisible by remember { mutableStateOf(true) }
-    val listState = rememberLazyListState()
-
-    // This flag helps differentiate between user scrolls and app-initiated scrolls after pausing.
-    val justPaused = remember { mutableStateOf(false) }
-
-    // This effect sets the flag when the user pauses playback.
-    LaunchedEffect(uiState.isPlaying) {
-        if (!uiState.isPlaying) {
-            justPaused.value = true
+    val navController = rememberNavController()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val openSrt = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            playbackViewModel.loadLocalSubtitles(context, it)
         }
     }
 
-    // This effect handles the "snap-to-center" logic when a user scroll finishes.
-    LaunchedEffect(listState, uiState.isPlaying) {
-        snapshotFlow { listState.isScrollInProgress }
-            .distinctUntilChanged()
-            .filter { !it && !uiState.isPlaying } // Only fire when scroll stops AND we are paused.
-            .collect {
-                // If we just paused, the scroll that just finished was from playback.
-                // We ignore it once to prevent a time jump, then reset the flag.
-                if (justPaused.value) {
-                    justPaused.value = false
-                    return@collect
-                }
-
-                val layoutInfo = listState.layoutInfo
-                if (layoutInfo.visibleItemsInfo.isEmpty()) return@collect
-
-                val viewportCenter = layoutInfo.viewportSize.height / 2
-                val centerItem = layoutInfo.visibleItemsInfo
-                    .minByOrNull { abs(it.offset + it.size / 2 - viewportCenter) }
-
-                centerItem?.let {
-                    val subtitleIndex = it.index - 1
-                    if (subtitleIndex in uiState.subtitles.indices) {
-                        viewModel.onSubtitleSelected(uiState.subtitles[subtitleIndex].startTimeMs)
-                    }
-                }
-            }
+    LaunchedEffect(initialSrtUri) {
+        initialSrtUri?.let {
+            playbackViewModel.loadLocalSubtitles(context, it)
+            onInitialSrtConsumed()
+        }
     }
 
-    // This effect handles programmatic scrolling ONLY during playback.
-    LaunchedEffect(uiState.visibleSubtitle, uiState.isPlaying) {
-        if (uiState.isPlaying) {
-            uiState.visibleSubtitle?.let {
-                val index = uiState.subtitles.indexOf(it)
-                if (index != -1 && !listState.isScrollInProgress) {
-                    listState.animateScrollToItem(index + 1)
-                }
+    LaunchedEffect(state.playerVersion) {
+        if (state.playerVersion > 0L) {
+            navController.navigate(Routes.Player) {
+                launchSingleTop = true
             }
         }
     }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> uri?.let { viewModel.loadSubtitles(context, it) } }
+    LaunchedEffect(state.notice) {
+        state.notice?.let { notice ->
+            snackbarHostState.showSnackbar(notice.message)
+            playbackViewModel.consumeNotice(notice.id)
+        }
+    }
+
+    val navigateBack: () -> Unit = {
+        if (state.preparation !is PreparationState.Idle) playbackViewModel.dismissPreparation()
+        navController.navigateUp()
+        Unit
+    }
 
     Scaffold(
-        modifier = modifier,
-        topBar = {
-            AnimatedVisibility(
-                visible = controlsVisible,
-                enter = fadeIn(animationSpec = tween(durationMillis = 200)),
-                exit = fadeOut(animationSpec = tween(durationMillis = 200))
-            ) {
-                KaptusTopAppBar(
-                    fileName = uiState.fileName,
-                    showActions = uiState.subtitles.isNotEmpty(),
-                    orientation = orientation,
-                    isSearchActive = uiState.isSearchActive,
-                    searchQuery = uiState.searchQuery,
-                    searchResults = Pair(uiState.currentSearchResultIndex, uiState.searchResults.size),
-                    onSearchActiveChange = viewModel::onSearchActiveChange,
-                    onSearchQueryChange = viewModel::onSearchQueryChange,
-                    onNextResult = viewModel::goToNextResult,
-                    onPreviousResult = viewModel::goToPreviousResult,
-                    onFlipOrientationClick = {
-                        val activity = context as? Activity
-                        activity?.requestedOrientation = if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                        } else {
-                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                        }
-                    }
+        modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            PreparationStatus(
+                state = state.preparation,
+                onDismiss = playbackViewModel::dismissPreparation,
+                onRetry = playbackViewModel::retryPreparation,
+                onSettings = {
+                    playbackViewModel.dismissPreparation()
+                    navController.navigate(Routes.Settings) { launchSingleTop = true }
+                }
+            )
+        },
+        contentWindowInsets = WindowInsets(0)
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = Routes.Home,
+            enterTransition = { fadeIn(tween(180)) },
+            exitTransition = { fadeOut(tween(120)) },
+            popEnterTransition = { fadeIn(tween(180)) },
+            popExitTransition = { fadeOut(tween(120)) },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            composable(Routes.Home) {
+                HomeScreen(
+                    providerConfigured = state.providerConfigured,
+                    preparedMovies = state.preparedMovies,
+                    onFindMovie = { navController.navigate(Routes.Search) },
+                    onOpenSrt = { openSrt.launch(arrayOf("application/x-subrip", "text/plain")) },
+                    onOpenSettings = { navController.navigate(Routes.Settings) },
+                    onOpenPreparedMovie = playbackViewModel::openPreparedMovie
                 )
             }
-        },
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-        ) {
-            // LAYER 1: The Tappable Background
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { controlsVisible = !controlsVisible })
-                    }
-            )
-
-            // LAYER 2: The UI Content
-            if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (uiState.subtitles.isNotEmpty()) {
-                val rollHeight = 600.dp
-                SubtitleRoll(
-                    modifier = Modifier
-                        .height(rollHeight)
-                        .align(Alignment.Center),
-                    listState = listState,
-                    subtitles = uiState.subtitles,
-                    height = rollHeight,
-                    isPlaying = uiState.isPlaying
+            composable(Routes.Search) {
+                MovieSearchScreen(
+                    query = state.searchQuery,
+                    results = state.searchResults,
+                    isSearching = state.isSearching,
+                    error = state.searchError,
+                    providerConfigured = state.providerConfigured,
+                    onBack = navigateBack,
+                    onOpenSettings = { navController.navigate(Routes.Settings) },
+                    onQueryChange = playbackViewModel::onSearchQueryChange,
+                    onSelectMovie = { playbackViewModel.prepareMovie(it, false) },
+                    onPrepareForTheater = { playbackViewModel.prepareMovie(it, true) }
                 )
-
-                AnimatedVisibility(
-                    visible = controlsVisible,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                    enter = fadeIn(animationSpec = tween(durationMillis = 200)),
-                    exit = fadeOut(animationSpec = tween(durationMillis = 200))
-                ) {
-                    PlaybackControls(
-                        isPlaying = uiState.isPlaying,
-                        currentTimeMs = uiState.currentTimeMs,
-                        totalDurationMs = uiState.totalDurationMs,
-                        sliderPosition = uiState.sliderPosition,
-                        onPlayPauseClick = viewModel::playPause,
-                        onSliderChange = viewModel::onSliderChange,
-                        onSliderChangeFinished = viewModel::onSliderChangeFinished,
-                        onSeek = viewModel::seek,
-                        orientation = orientation
+            }
+            composable(Routes.Settings) {
+                SettingsScreen(
+                    credentials = state.providerCredentials,
+                    settings = state.settings,
+                    isTesting = state.isTestingProvider,
+                    onBack = navigateBack,
+                    onSaveCredentials = playbackViewModel::saveCredentials,
+                    onTestConnection = playbackViewModel::testProviderConnection,
+                    onCaptionSizeChange = playbackViewModel::setCaptionSize,
+                    onBrightnessChange = playbackViewModel::setTheaterBrightness
+                )
+            }
+            composable(Routes.Player) {
+                val player = state.player
+                if (player == null) {
+                    LaunchedEffect(Unit) { navController.navigateUp() }
+                } else {
+                    PlayerScreen(
+                        player = player,
+                        settings = state.settings,
+                        onBack = navigateBack,
+                        onPlayPause = playbackViewModel::playPause,
+                        onSliderChange = playbackViewModel::onSliderChange,
+                        onSliderChangeFinished = playbackViewModel::onSliderChangeFinished,
+                        onAdjustCaption = playbackViewModel::adjustCaptionOffset,
+                        onStartSynchronization = playbackViewModel::startSynchronization,
+                        onResync = playbackViewModel::resync,
+                        onMicrophoneDenied = playbackViewModel::reportMicrophoneDenied,
+                        onStopForBackground = playbackViewModel::stopForBackground,
+                        onResumeAfterBackground = playbackViewModel::resumeAfterBackground,
+                        onCaptionSizeChange = playbackViewModel::setCaptionSize,
+                        onBrightnessChange = playbackViewModel::setTheaterBrightness
                     )
-                }
-            } else {
-                // The initial "Select File" screen
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = uiState.errorMessage ?: "Select an SRT file to begin",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { filePickerLauncher.launch("*/*") }) {
-                        Text("Select File")
-                    }
                 }
             }
         }
     }
-}T
+    // Register after navigation so Back cancels in-progress preparation first.
+    BackHandler(enabled = state.preparation !is PreparationState.Idle) {
+        playbackViewModel.dismissPreparation()
+    }
+}

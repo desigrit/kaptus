@@ -1,74 +1,84 @@
-// app/src/main/java/com/example/kaptus/data/SrtParser.kt
-
 package com.example.kaptus.data
 
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 import java.util.regex.Pattern
 
 class SrtParser {
-
     companion object {
         private val TIMESTAMP_PATTERN = Pattern.compile(
-            "(\\d{2}):(\\d{2}):(\\d{2}),(\\d{3})\\s*-->\\s*(\\d{2}):(\\d{2}):(\\d{2}),(\\d{3})"
+            "(\\d{1,2}):(\\d{2}):(\\d{2})[,.](\\d{1,3})\\s*-->\\s*" +
+                "(\\d{1,2}):(\\d{2}):(\\d{2})[,.](\\d{1,3})"
         )
     }
 
     fun parse(inputStream: InputStream): List<SubtitleEntry> {
-        // First, read the whole file and normalize all different kinds of newlines to one standard (\n)
-        val srtContent = inputStream.bufferedReader().use { it.readText() }
-            .replace("\r\n", "\n").replace("\r", "\n")
+        val content = decode(inputStream.readBytes())
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .removePrefix("\uFEFF")
+        val blocks = content.trim().split(Regex("\n[ \\t]*\n+"))
+        val htmlTag = Regex("<[^>]+>")
+        // Character classes keep literal braces portable across the JVM and Android regex engines.
+        val formattingOverride = Regex("""[{][^}]*[}]""")
 
-        val subtitles = mutableListOf<SubtitleEntry>()
-        // Split the file into blocks based on one or more empty lines
-        val blocks = srtContent.trim().split(Regex("\n\n+"))
-
-        // This regex will find and remove any HTML tag (e.g., <font>, </u>, <i>)
-        val htmlTagRegex = Regex("<.*?>")
-
-        for (block in blocks) {
-            if (block.isBlank()) continue
-
-            val lines = block.split("\n")
-            if (lines.isEmpty()) continue
-
-            try {
-                // Find the line that contains the timestamp ("-->")
+        return buildList {
+            for (block in blocks) {
+                if (block.isBlank()) continue
+                val lines = block.split('\n')
                 val timestampLineIndex = lines.indexOfFirst { "-->" in it }
-                if (timestampLineIndex == -1) continue // Skip block if no timestamp is found
+                if (timestampLineIndex < 0) continue
+                val matcher = TIMESTAMP_PATTERN.matcher(lines[timestampLineIndex])
+                if (!matcher.find()) continue
 
-                val timestampLine = lines[timestampLineIndex]
-                val matcher = TIMESTAMP_PATTERN.matcher(timestampLine)
-                if (!matcher.matches()) continue // Skip if the line isn't a valid timestamp
-
-                // The index is the line right before the timestamp, if it exists and is a number.
                 val index = lines.getOrNull(timestampLineIndex - 1)?.trim()?.toIntOrNull() ?: -1
-
-                // The text is all the lines after the timestamp. Then, remove HTML tags.
                 val text = lines.drop(timestampLineIndex + 1)
                     .joinToString("\n")
-                    .replace(htmlTagRegex, "") // Remove HTML tags
+                    .replace(htmlTag, "")
+                    .replace(formattingOverride, "")
+                    .replace("&amp;", "&")
+                    .replace("&lt;", "<")
+                    .replace("&gt;", ">")
+                    .replace("&quot;", "\"")
+                    .replace("&apos;", "'")
+                    .replace("&#39;", "'")
+                    .replace("&nbsp;", " ")
                     .trim()
+                if (text.isEmpty()) continue
 
-                if (text.isNotEmpty()) {
-                    val startTime = parseTimeToMilliseconds(
+                runCatching {
+                    val start = parseTimeToMilliseconds(
                         matcher.group(1)!!.toInt(), matcher.group(2)!!.toInt(),
-                        matcher.group(3)!!.toInt(), matcher.group(4)!!.toInt()
+                        matcher.group(3)!!.toInt(), parseMilliseconds(matcher.group(4)!!)
                     )
-                    val endTime = parseTimeToMilliseconds(
+                    val end = parseTimeToMilliseconds(
                         matcher.group(5)!!.toInt(), matcher.group(6)!!.toInt(),
-                        matcher.group(7)!!.toInt(), matcher.group(8)!!.toInt()
+                        matcher.group(7)!!.toInt(), parseMilliseconds(matcher.group(8)!!)
                     )
-                    subtitles.add(SubtitleEntry(index, startTime, endTime, text))
+                    if (end > start) add(SubtitleEntry(index, start, end, text))
                 }
-            } catch (e: Exception) {
-                // Ignore any malformed blocks and continue
-                continue
             }
-        }
-        return subtitles.sortedBy { it.startTimeMs }
+        }.sortedBy { it.startTimeMs }
     }
 
-    private fun parseTimeToMilliseconds(h: Int, m: Int, s: Int, ms: Int): Long {
-        return (h * 3600000L) + (m * 60000L) + (s * 1000L) + ms
+    private fun parseTimeToMilliseconds(hours: Int, minutes: Int, seconds: Int, millis: Int): Long =
+        hours * 3_600_000L + minutes * 60_000L + seconds * 1_000L + millis
+
+    private fun parseMilliseconds(value: String): Int = value.padEnd(3, '0').take(3).toInt()
+
+    private fun decode(bytes: ByteArray): String {
+        val payload = if (
+            bytes.size >= 3 && bytes[0] == 0xEF.toByte() &&
+            bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()
+        ) bytes.copyOfRange(3, bytes.size) else bytes
+        return runCatching {
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(payload))
+                .toString()
+        }.getOrElse { payload.toString(Charsets.ISO_8859_1) }
     }
 }

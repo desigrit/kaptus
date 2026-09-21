@@ -13,6 +13,6 @@ data class SubtitleEntry(
     val text: String
 ) : Parcelable {
     fun isActiveAt(timeMs: Long): Boolean {
-        return timeMs in startTimeMs..endTimeMs
+        return timeMs >= startTimeMs && timeMs < endTimeMs
     }
 }

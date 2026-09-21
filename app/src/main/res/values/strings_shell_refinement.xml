@@ -1,0 +1,4 @@
+<resources>
+    <string name="cancel_preparation">Cancel</string>
+    <string name="preparation_failed_title">Could not prepare captions</string>
+</resources>

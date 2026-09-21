@@ -1,0 +1,20 @@
+<resources>
+    <string name="settings_appearance_description">Settle on a comfortable size and brightness before the movie starts.</string>
+    <string name="settings_caption_preview">Caption preview</string>
+    <string name="settings_caption_preview_text">Every moment\nhas a story.</string>
+    <string name="settings_size_description">Your phone\'s font size setting also applies.</string>
+    <string name="settings_brightness_label">Player brightness</string>
+    <string name="settings_brightness_description">Used only in the caption player. Your usual brightness returns when you leave.</string>
+    <string name="settings_provider_title">OpenSubtitles</string>
+    <string name="settings_provider_description">Connect to find and download English captions. Local SRT files work without an account.</string>
+    <string name="settings_optional_account">Have an OpenSubtitles account? Add your login to use its download allowance.</string>
+    <string name="settings_show_api_key">Show API key</string>
+    <string name="settings_hide_api_key">Hide API key</string>
+    <string name="settings_unsaved_changes">You have unsaved changes</string>
+    <string name="settings_credentials_saved">Credentials saved on this phone</string>
+    <string name="settings_provider_not_added">No provider credentials saved</string>
+    <string name="settings_save_changes">Save changes</string>
+    <string name="settings_remove_credentials">Remove saved credentials</string>
+    <string name="settings_save_and_test">Save and test connection</string>
+    <string name="settings_credentials_privacy">Credentials are encrypted on this phone and sent only to OpenSubtitles when needed. Microphone audio stays on your device.</string>
+</resources>
