@@ -36,6 +36,15 @@ class SubtitleRankerTest {
         assertTrue(ranked.none { it.foreignPartsOnly || it.language != "en" })
     }
 
+    @Test
+    fun selectedLanguageIsExactAndKeepsProviderVariantsDistinct() {
+        val brazilian = track(6, language = "pt-br", hearingImpaired = true)
+        val portuguese = track(7, language = "pt-pt", hearingImpaired = true)
+        val english = track(8, language = "en", hearingImpaired = true)
+        assertEquals(listOf(brazilian), SubtitleRanker.rank(listOf(brazilian, portuguese, english), movie, "pt-br"))
+        assertEquals(listOf(portuguese), SubtitleRanker.rank(listOf(brazilian, portuguese, english), movie, "pt-pt"))
+    }
+
     private fun track(
         fileId: Long,
         language: String = "en",

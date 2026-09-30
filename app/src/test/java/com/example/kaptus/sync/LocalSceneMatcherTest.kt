@@ -11,6 +11,41 @@ import org.junit.Test
 class LocalSceneMatcherTest {
     private val matcher = LocalSceneMatcher()
 
+    @Test fun unicodeNormalizationPreservesWritingSystemsAndCombiningMarks() {
+        assertTrue(CaptionTextNormalizer.tokens("தமிழ் తెలుగు नमस्ते مرحبا").containsAll(
+            listOf("தமிழ்", "తెలుగు", "नमस्ते", "مرحبا")))
+        assertTrue(CaptionTextNormalizer.tokens("明天 去电影院") == CaptionTextNormalizer.tokens("明天去电影院"))
+    }
+
+    @Test fun nearbySearchCannotHideARepeatedSceneElsewhereInTheTrack() {
+        val first = uniqueCaptions(10_000L)
+        val repeated = uniqueCaptions(300_000L).map { it.copy(index = it.index + 10) }
+        val index = matcher.buildIndex(first + repeated)
+        val segment = segmentFrom(index.words.filter { it.cueIndex <= 1 }.take(12), offsetMs = 2_000L)
+        assertFalse(matcher.match(segment, index, expectedTimeMs = 10_000L).confident)
+    }
+
+    @Test fun spokenLanguageHelpersCanMatchUnicodeDialogueWithPunctuationDifferences() {
+        val cases = listOf(
+            "zh" to "明天我们一起去电影院看看新的故事",
+            "ja" to "明日は東京の映画館で新しい物語を見よう",
+            "ko" to "내일 우리는 조용한 정원에서 친구들을 만나자",
+            "hi" to "कल हम शांत बगीचे में पुराने दोस्तों से मिलेंगे",
+            "te" to "రేపు మనం నిశ్శబ్ద తోటలో పాత స్నేహితులను కలుద్దాం",
+            "ta" to "நாளை நாம் அமைதியான தோட்டத்தில் பழைய நண்பர்களை சந்திப்போம்"
+        )
+        cases.forEach { (language, line) ->
+            val captions = listOf(SubtitleEntry(1, 20_000, 26_000, "$line!"),
+                SubtitleEntry(2, 40_000, 45_000, "a completely different quiet corner"))
+            val words = CaptionTextNormalizer.tokens(line).mapIndexed { position, text ->
+                RecognizedWord(text, position * 200_000_000L, position * 200_000_000L + 100_000_000L, 0.9f)
+            }
+            val result = matcher.match(RecognizedSegment(words, 0, 6_000_000_000, sourceLanguage = language),
+                matcher.buildIndex(captions), null)
+            assertTrue("Unicode helper should match for $language: $result", result.confident)
+        }
+    }
+
     @Test
     fun normalizationRemovesLabelsMarkupAndSoundDescriptions() {
         val tokens = CaptionTextNormalizer.tokens(

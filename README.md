@@ -6,9 +6,9 @@
 
 **Companion captions that can find their place in a movie or TV episode.**
 
-Kaptus is an Android app for the moments when a movie or TV show does not have usable captions. Choose what you are watching, let Kaptus listen to a short stretch of dialogue, and it will find the matching line in the subtitle track. Once it is synchronized, the microphone turns off and the captions continue on a calm, cinema-friendly screen.
+Kaptus is an Android app for the moments when a movie or TV show does not have usable captions. Choose what you are watching and the language you want to read. Follow the words on a calm, cinema-friendly screen, with simple controls to set the timing.
 
-Kaptus is an early preview made with hard-of-hearing viewers in mind. It currently supports English audio and English captions on Android 13 or newer.
+Kaptus is an early preview made with hard-of-hearing viewers in mind, for Android 13 or newer. Choose captions in any language available for your movie or episode, or open your own Unicode SRT. English audio with English captions supports auto-seek; other combinations currently use manual timing.
 
 <p align="center">
   <img src="docs/images/kaptus-player-portrait.png" alt="Kaptus showing synchronized captions for Dune: Part Two in a Pixel 10 Pro-style frame" width="42%" />
@@ -37,11 +37,11 @@ Kaptus gives you two ways to begin:
 
 ### Open an SRT file
 
-Choose **Open SRT file** to pick a caption file from your phone or a connected cloud-storage provider. This path works without an OpenSubtitles account or an internet connection.
+Choose **Open SRT file** to pick a caption file from your phone or a connected cloud-storage provider. Tell Kaptus which language is in the file and which language you hear. Choose **Not sure** for manual timing. This path works without an OpenSubtitles account or an internet connection.
 
 ### Find a movie or TV show
 
-Choose **Find a movie or TV show**, search by title, and select the correct result. For a TV show, choose the season and episode. Kaptus ranks complete English captions, prefers SDH tracks, and downloads the best match.
+Choose **Find a movie or TV show**, search by title, and select the correct result. For a TV show, choose the season and episode. Set **Caption language** and **Spoken language** independently. Kaptus ranks complete captions in your selected language, prefers SDH tracks, and downloads the best match. Your History keeps saved caption languages separate.
 
 The first time you use search, Kaptus asks for an OpenSubtitles API key.
 
@@ -64,18 +64,26 @@ Keep your API key private. Kaptus encrypts it with Android Keystore and keeps it
 ## Watching with Kaptus
 
 1. Start the movie or episode and open its prepared captions in Kaptus.
-2. Grant microphone access and let a clear line of dialogue play.
+2. For an available auto-seek combination, grant microphone access and let a clear line of dialogue play. For **Manual timing**, use the timeline and tap Play.
 3. Kaptus listens to overlapping six-second windows, transcribes on your phone, and searches the subtitle text for that phrase.
 4. When **Synced** appears, the microphone stops and the caption clock continues on its own.
 5. Tap anywhere to reveal playback controls. Use **Resync** whenever you need Kaptus to listen again.
 
 You can pause captions, move along the timeline, adjust timing in half-second steps, change text size and brightness, or lock the screen orientation. Manual timeline changes never turn the microphone back on.
 
-Each synchronization attempt stops after 30 seconds of detected dialogue if it cannot find a unique match. Clear, distinctive dialogue works best. Very short or repeated lines, music-heavy scenes, background conversations, and captions from a different cut can prevent a reliable match. Move closer to the movie audio, wait for a clearer line, and tap **Resync** to try again.
+Each synchronization attempt stops after 35 seconds, including model initialization and silence, if it cannot find a unique match. Clear, distinctive dialogue works best. Very short or repeated lines, music-heavy scenes, background conversations, and captions from a different cut can prevent a reliable match. Move closer to the movie audio, wait for a clearer line, and tap **Resync** to try again.
+
+### Multilingual auto-seek
+
+Mandarin, Japanese, Spanish, French, German, Korean, Hindi, Telugu and Tamil audio with English captions are the next auto-seek targets. Their recognition paths are implemented for evaluation, but remain disabled until each platform and matching path passes physical-device accuracy and speed tests. Downloading the optional model does not enable an unvalidated language.
+
+In Settings, **Multilingual auto-seek model** offers one verified download of approximately 190 MB, shared by all nine targets. It stays on your phone and can be removed. The English model remains bundled. There is no automatic larger-model download.
+
+The planned multilingual path matches a spoken-language helper subtitle file when available, checks its timing against the English display track, and otherwise translates recognized speech into English for matching. A helper file uses an additional OpenSubtitles download only when it is not already saved. See [language support and validation](docs/MULTILINGUAL.md) for the current matrix and test protocol.
 
 ## Prepare before you go
 
-Choose **Prepare for theater** while you are online to save up to three ranked caption tracks. The speech model is bundled with the app, so a prepared movie or episode can synchronize without a network connection.
+Choose **Prepare for theater** while you are online. Kaptus shows the maximum provider download allowance needed before continuing and reuses verified saved files. English auto-seek preparation saves up to three ranked tracks and checks the bundled model. Manual combinations save one display track for offline reading without needing a speech model. **Captions saved** and **Offline auto-seek ready** are separate statuses.
 
 For the best result, choose the exact movie and year or the correct TV episode, place the phone where it can hear the room audio clearly, and start synchronization during spoken dialogue. Alternate cuts can use different timing or dialogue, so Resync or another caption track may be needed.
 
@@ -85,7 +93,8 @@ For the best result, choose the exact movie and year or the correct TV episode, 
 - Microphone audio stays in memory and is never saved to disk.
 - Audio is never uploaded.
 - The microphone stops as soon as Kaptus finds the scene.
-- It starts again only for an unfinished initial search or when you tap **Resync**.
+- It starts only when opening captions with an available auto-seek combination or when you tap **Resync**.
+- Backgrounding stops capture. A running caption clock continues; returning to the app does not start the microphone.
 - OpenSubtitles credentials are encrypted with Android Keystore.
 - Downloaded captions are stored in app-private storage.
 
@@ -112,7 +121,9 @@ When Kaptus finds a unique phrase, it uses the audio capture time to compensate 
 
 ## Current scope
 
-- English audio and English captions
+- Provider-supported caption languages and Unicode local SRT files
+- English audio with English captions for currently enabled auto-seek
+- Nine additional spoken-language-to-English targets gated on device validation
 - User-selected movie or TV show, with season and episode selection
 - Local SRT files or OpenSubtitles caption tracks
 - Android 13 or newer

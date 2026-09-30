@@ -5,6 +5,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecognizedWordAssemblerTest {
+    @Test fun joinsSplitUtf8BeforeDecodingAndPreservesIndicMarks() {
+        val original = " नमस्ते தமிழ் తెలుగు"
+        val bytes = original.toByteArray(Charsets.UTF_8)
+        val tokens = bytes.mapIndexed { index, byte -> DecodedSpeechBytes(byteArrayOf(byte), index.toLong(), index + 1L, 0.9f) }
+        val words = RecognizedWordAssembler.assembleBytes(tokens, 0)
+        assertEquals(listOf("नमस्ते", "தமிழ்", "తెలుగు"), words.map { it.text })
+        assertTrue(words.none { '\uFFFD' in it.text })
+    }
+
+    @Test fun translatedTokensRetainUtteranceIntervalsInsteadOfInventedWordTimes() {
+        val words = RecognizedWordAssembler.assembleBytes(listOf(
+            DecodedSpeechBytes(" Bring the silver compass".toByteArray(), 10, 200, 0.9f)
+        ), 1_000_000_000, "es", translated = true)
+        assertTrue(words.all { it.startTimeNanos == 1_100_000_000L && it.endTimeNanos == 3_000_000_000L })
+    }
+
+    @Test fun japaneseAndMandarinUseCharacterPairsWithoutWhitespace() {
+        val words = RecognizedWordAssembler.assembleBytes(listOf(
+            DecodedSpeechBytes("明日は東京へ行こう".toByteArray(), 0, 300, 0.9f)
+        ), 0, "ja")
+        assertTrue(words.size > 3)
+        assertEquals("明日", words.first().text)
+    }
     @Test
     fun joinsSubwordPiecesAndKeepsTimedWordBoundaries() {
         val words = RecognizedWordAssembler.assemble(

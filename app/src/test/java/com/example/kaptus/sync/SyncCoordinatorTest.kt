@@ -6,10 +6,13 @@ import com.example.kaptus.data.RecognizedSegment
 import com.example.kaptus.data.RecognizedWord
 import com.example.kaptus.data.SubtitleEntry
 import com.example.kaptus.data.SyncAnchor
+import com.example.kaptus.data.RecognitionTask
 import com.example.kaptus.speech.RecognitionCadence
 import com.example.kaptus.speech.RecognitionActivity
 import com.example.kaptus.speech.SpeechRecognitionEngine
+import com.example.kaptus.speech.SpeechRecognitionConfiguration
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,8 +27,56 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SyncCoordinatorTest {
+    @Test fun aDelayedResyncCannotStartCaptureAfterBackgrounding() = runTest {
+        val engine = FakeSpeechEngine()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
+        coordinator.load(captions())
+        runCurrent()
+        engine.stopDelayMs = 5_000L
+        coordinator.resync()
+        runCurrent()
+        coordinator.stop(backgrounded = true)
+        advanceTimeBy(6_000L)
+        runCurrent()
+        assertFalse(engine.started)
+        coordinator.close()
+    }
+
+    @Test fun manuallyPlayingAfterATimeoutContinuesAcrossBackgrounding() = runTest {
+        val engine = FakeSpeechEngine()
+        val clock = FakeClock()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), clock)
+        coordinator.load(captions())
+        runCurrent()
+        coordinator.start()
+        advanceTimeBy(36_000L)
+        runCurrent()
+        assertTrue(coordinator.state.value is SyncState.Error)
+        clock.play()
+        coordinator.stop(backgrounded = true)
+        runCurrent()
+        assertTrue(clock.playing.value)
+        assertFalse(engine.started)
+        coordinator.close()
+    }
+
+    @Test fun directTranslationDoesNotRunAnUnneededSourcePass() = runTest {
+        val engine = FakeSpeechEngine()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
+        coordinator.configureLanguages("es", "en", "verified-model", validationRegistry = AutoSeekValidationRegistry {
+            language, path -> language == "es" && path == MatchingPath.DIRECT_TRANSLATION
+        })
+        coordinator.load(captions())
+        runCurrent()
+        coordinator.start()
+        runCurrent()
+        assertEquals(RecognitionTask.TRANSLATE, engine.configuration.task)
+        assertFalse(engine.configuration.includeTranslation)
+        coordinator.close()
+    }
+
     @Test
-    fun silenceKeepsListeningWithoutAdvancingOrFailingTheClock() = runTest {
+    fun silenceEndsAtTheTotalAttemptDeadlineWithoutAdvancingTheClock() = runTest {
         val engine = FakeSpeechEngine()
         val clock = FakeClock()
         val coordinator = SyncCoordinator(
@@ -43,9 +94,85 @@ class SyncCoordinatorTest {
         advanceTimeBy(65_000L)
         runCurrent()
 
-        assertTrue(engine.started)
-        assertTrue(coordinator.state.value is SyncState.Acquiring)
+        assertFalse(engine.started)
+        assertTrue(coordinator.state.value is SyncState.Error)
         assertFalse(clock.playing.value)
+        coordinator.close()
+    }
+
+    @Test
+    fun unsupportedAndUnvalidatedPairsNeverStartTheMicrophone() = runTest {
+        val engine = FakeSpeechEngine()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
+        coordinator.configureLanguages("es", "en", modelPath = "verified-model")
+        coordinator.load(captions())
+        coordinator.start()
+        coordinator.resync()
+        runCurrent()
+        assertFalse(engine.started)
+        assertEquals(AutoSeekReason.AWAITING_VALIDATION, coordinator.capability.reason)
+        coordinator.configureLanguages("en", "fr")
+        coordinator.start()
+        runCurrent()
+        assertFalse(engine.started)
+        assertEquals(AutoSeekReason.UNSUPPORTED_PAIR, coordinator.capability.reason)
+        coordinator.close()
+    }
+
+    @Test
+    fun translatedPassesRequireNonOverlappingEvidenceAndRejectStaleSessions() = runTest {
+        val engine = FakeSpeechEngine()
+        val clock = FakeClock()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(
+            result(anchor(6, 16_000)), result(anchor(9, 19_000)), result(anchor(12, 22_000))
+        ), clock) { 15_000_000_000L }
+        coordinator.configureLanguages("es", "en", "verified-model", validationRegistry = AutoSeekValidationRegistry {
+            language, path -> language == "es" && path == MatchingPath.DIRECT_TRANSLATION
+        })
+        coordinator.load(captions())
+        runCurrent()
+        coordinator.start()
+        runCurrent()
+        engine.emitSegment(0, 6, RecognitionTask.TRANSLATE, stale = true)
+        engine.emitSegment(0, 6, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertTrue(clock.seeks.isEmpty())
+        engine.emitSegment(3, 9, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertTrue("An overlapping window is not independent confirmation", clock.seeks.isEmpty())
+        engine.emitSegment(6, 12, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertEquals(25_000L, clock.seeks.single())
+        assertFalse(engine.started)
+        coordinator.close()
+    }
+
+    @Test
+    fun helperMappingIsAcceptedOnlyAfterIndependentEnglishCrossChecks() = runTest {
+        val engine = FakeSpeechEngine()
+        val mappings = mutableListOf<ValidatedCaptionMapping>()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(
+            result(anchor(6, 36_000)), result(anchor(6, 16_000)),
+            result(anchor(12, 42_000)), result(anchor(12, 22_000))
+        ), FakeClock()) { 12_000_000_000L }
+        coordinator.configureLanguages("ja", "en", "verified-model", captions(), "display-digest", "helper-digest",
+            AutoSeekValidationRegistry { language, path -> language == "ja" && path == MatchingPath.MATCHING_HELPER },
+            onValidatedMapping = mappings::add)
+        coordinator.load(captions())
+        runCurrent()
+        coordinator.start()
+        runCurrent()
+        engine.emitSegment(0, 6, RecognitionTask.TRANSCRIBE)
+        engine.emitSegment(0, 6, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertTrue(mappings.isEmpty())
+        engine.emitSegment(6, 12, RecognitionTask.TRANSCRIBE)
+        engine.emitSegment(6, 12, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertEquals(-20_000L, mappings.single().displayOffsetMs)
+        assertEquals(18_000L, mappings.single().displayTimeAt(38_000, "display-digest", "helper-digest"))
+        assertEquals(null, mappings.single().displayTimeAt(80_000, "display-digest", "helper-digest"))
+        assertEquals(null, mappings.single().displayTimeAt(38_000, "different-digest", "helper-digest"))
         coordinator.close()
     }
 
@@ -192,6 +319,12 @@ class SyncCoordinatorTest {
         override val isReady = true
         var started = false
         var currentCadence = RecognitionCadence.ACQUIRING
+        var configuration = SpeechRecognitionConfiguration()
+        var stopDelayMs = 0L
+
+        override suspend fun configure(configuration: SpeechRecognitionConfiguration) {
+            this.configuration = configuration
+        }
 
         override suspend fun prepare() = Unit
 
@@ -201,6 +334,7 @@ class SyncCoordinatorTest {
         }
 
         override suspend fun stop() {
+            delay(stopDelayMs)
             started = false
             mutableActivity.value = RecognitionActivity.IDLE
         }
@@ -224,7 +358,16 @@ class SyncCoordinatorTest {
             } else {
                 emptyList()
             }
-            mutableResults.emit(RecognizedSegment(words, 0, 0, speechDetected = speechDetected))
+            mutableResults.emit(RecognizedSegment(words, 0, 0, speechDetected = speechDetected,
+                sessionId = configuration.sessionId, sourceLanguage = configuration.sourceLanguage))
+        }
+
+        suspend fun emitSegment(startSeconds: Long, endSeconds: Long, task: RecognitionTask, stale: Boolean = false) {
+            val start = startSeconds * 1_000_000_000L
+            val end = endSeconds * 1_000_000_000L
+            mutableResults.emit(RecognizedSegment(listOf(RecognizedWord("dialogue", start, end, 0.9f)), start, end,
+                sessionId = configuration.sessionId - if (stale) 1 else 0,
+                sourceLanguage = configuration.sourceLanguage, task = task))
         }
     }
 

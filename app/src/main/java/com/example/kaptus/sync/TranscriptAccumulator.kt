@@ -41,7 +41,10 @@ internal class TranscriptAccumulator(
             words = words.toList(),
             capturedStartNanos = words.firstOrNull()?.startTimeNanos ?: segment.capturedStartNanos,
             capturedEndNanos = windowEnd,
-            speechDetected = segment.speechDetected
+            speechDetected = segment.speechDetected,
+            sessionId = segment.sessionId,
+            sourceLanguage = segment.sourceLanguage,
+            task = segment.task
         )
     }
 

@@ -174,13 +174,14 @@ fun PlayerScreen(
     var localBrightness by remember(settings.theaterBrightness) {
         mutableFloatStateOf(settings.theaterBrightness)
     }
-    val currentModelReady by rememberUpdatedState(player.modelReady)
+    val currentModelReady by rememberUpdatedState(player.modelReady && player.autoSeekAvailable)
     val currentStart by rememberUpdatedState(onStartSynchronization)
     val currentStop by rememberUpdatedState(onStopForBackground)
     val currentResume by rememberUpdatedState(onResumeAfterBackground)
     val interact = { interactionRevision++; controlsVisible = true }
     val synchronized = player.syncState as? SyncState.Synchronized
-    val showSyncStatus = synchronized == null || synchronized.checking || showSettledSyncStatus
+    val showSyncStatus = if (!player.autoSeekAvailable) controlsVisible
+        else synchronized == null || synchronized.checking || showSettledSyncStatus
 
     LaunchedEffect(synchronized?.lastConfirmedRealtimeMs, synchronized?.checking) {
         if (synchronized != null && !synchronized.checking) {
@@ -196,17 +197,19 @@ fun PlayerScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         microphoneGranted = granted
-        if (granted) startAfterPermission = true else onMicrophoneDenied()
+        if (player.autoSeekAvailable) {
+            if (granted) startAfterPermission = true else onMicrophoneDenied()
+        }
     }
 
-    LaunchedEffect(autoRequestMicrophone, player.modelReady, foreground, startAfterPermission) {
+    LaunchedEffect(autoRequestMicrophone, player.modelReady, player.autoSeekAvailable, foreground, startAfterPermission) {
         // A model may finish preparing, or permission may return, while the activity is paused.
-        if (player.modelReady && foreground) {
+        if (player.autoSeekAvailable && player.modelReady && foreground) {
             if (startAfterPermission && microphoneGranted) {
                 startAfterPermission = false
                 entryStartHandled = true
                 currentStart()
-            } else if (autoRequestMicrophone && !entryStartHandled) {
+            } else if (autoRequestMicrophone && !entryStartHandled && player.syncState is SyncState.Idle) {
                 entryStartHandled = true
                 if (microphoneGranted) currentStart() else showMicrophoneExplanation = true
             }
@@ -380,7 +383,8 @@ fun PlayerScreen(
                         onAdjustCaption = { interact(); onAdjustCaption(it) },
                         onSync = {
                             interact()
-                            if (!microphoneGranted) showMicrophoneExplanation = true
+                            if (!player.autoSeekAvailable) Unit
+                            else if (!microphoneGranted) showMicrophoneExplanation = true
                             else if (player.syncState is SyncState.Idle) {
                                 onStartSynchronization()
                             } else onResync()
@@ -465,7 +469,9 @@ private fun rememberTouchExplorationEnabled(): Boolean {
 }
 
 @Composable
-private fun syncExplanation(player: PlayerUiState): String? = if (!player.modelReady) {
+private fun syncExplanation(player: PlayerUiState): String? = if (!player.autoSeekAvailable) {
+    null
+} else if (!player.modelReady) {
     stringResource(R.string.model_unavailable)
 } else when (val sync = player.syncState) {
     SyncState.Listening -> stringResource(R.string.sync_hearing_detail)
@@ -493,7 +499,9 @@ private fun syncExplanation(player: PlayerUiState): String? = if (!player.modelR
 @Composable
 private fun SyncStatus(player: PlayerUiState, microphoneGranted: Boolean, modifier: Modifier = Modifier) {
     val state = player.syncState
-    val label = if (!player.modelReady || (!microphoneGranted && state is SyncState.Idle)) {
+    val label = if (!player.autoSeekAvailable) {
+        stringResource(R.string.manual_timing)
+    } else if (!player.modelReady || (!microphoneGranted && state is SyncState.Idle)) {
         stringResource(R.string.needs_attention)
     } else if (!player.isPlaying && state is SyncState.Idle) {
         stringResource(R.string.player_paused)
@@ -504,7 +512,7 @@ private fun SyncStatus(player: PlayerUiState, microphoneGranted: Boolean, modifi
         is SyncState.Synchronized -> stringResource(if (state.checking) R.string.checking_sync else R.string.synced)
         is SyncState.Error -> stringResource(R.string.needs_attention)
     }
-    val settled = state is SyncState.Synchronized && !state.checking
+    val settled = !player.autoSeekAvailable || state is SyncState.Synchronized && !state.checking
     Row(
         modifier = modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -667,7 +675,7 @@ private fun PlayerDock(
                         contentColor = MutedGray
                     )
                 ) { Text(stringResource(R.string.plus_500)) }
-                OutlinedButton(onClick = onSync, enabled = player.modelReady, modifier = Modifier.heightIn(min = 56.dp)) {
+                if (player.autoSeekAvailable) OutlinedButton(onClick = onSync, enabled = player.modelReady, modifier = Modifier.heightIn(min = 56.dp)) {
                     Icon(Icons.Outlined.CenterFocusStrong, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(

@@ -10,6 +10,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -17,8 +24,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -27,6 +39,10 @@ import androidx.navigation.compose.rememberNavController
 import com.example.kaptus.KaptusApplication
 import com.example.kaptus.PlaybackViewModel
 import com.example.kaptus.PreparationState
+import com.example.kaptus.R
+import com.example.kaptus.sync.AutoSeekCapabilities
+import com.example.kaptus.sync.AutoSeekMode
+import com.example.kaptus.ui.screens.LanguageSelection
 import com.example.kaptus.ui.screens.HomeScreen
 import com.example.kaptus.ui.screens.MovieSearchScreen
 import com.example.kaptus.ui.screens.PlayerScreen
@@ -55,6 +71,9 @@ fun MainScreen(
     val context = LocalContext.current
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
+    var pendingImport by remember { mutableStateOf<Uri?>(null) }
+    var importLanguage by remember { mutableStateOf("und") }
+    var importSpokenLanguage by remember(state.settings.spokenLanguage) { mutableStateOf(state.settings.spokenLanguage) }
     val openSrt = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             runCatching {
@@ -63,13 +82,15 @@ fun MainScreen(
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
-            playbackViewModel.loadLocalSubtitles(context, it)
+            importLanguage = "und"
+            pendingImport = it
         }
     }
 
     LaunchedEffect(initialSrtUri) {
         initialSrtUri?.let {
-            playbackViewModel.loadLocalSubtitles(context, it)
+            importLanguage = "und"
+            pendingImport = it
             onInitialSrtConsumed()
         }
     }
@@ -129,7 +150,10 @@ fun MainScreen(
                     onFindMovie = { navController.navigate(Routes.Search) },
                     onOpenSrt = { openSrt.launch(arrayOf("application/x-subrip", "text/plain")) },
                     onOpenSettings = { navController.navigate(Routes.Settings) },
-                    onOpenPreparedMovie = playbackViewModel::openPreparedMovie
+                    onOpenPreparedMovie = { playbackViewModel.openPreparedMovie(it) },
+                    onOpenPreparedCaptions = {
+                        playbackViewModel.openPreparedMovie(it.featureId, it.captionLanguage, it.spokenLanguage)
+                    }
                 )
             }
             composable(Routes.Search) {
@@ -142,8 +166,14 @@ fun MainScreen(
                     onBack = navigateBack,
                     onOpenSettings = { navController.navigate(Routes.Settings) },
                     onQueryChange = playbackViewModel::onSearchQueryChange,
-                    onSelectMovie = { playbackViewModel.prepareMovie(it, false) },
-                    onPrepareForTheater = { playbackViewModel.prepareMovie(it, true) }
+                    onSelectMovie = { playbackViewModel.requestPreparation(it, false) },
+                    onPrepareForTheater = { playbackViewModel.requestPreparation(it, true) },
+                    languages = state.languages,
+                    captionLanguage = state.settings.captionLanguage,
+                    spokenLanguage = state.settings.spokenLanguage,
+                    onCaptionLanguageChange = { playbackViewModel.setLanguages(it, state.settings.spokenLanguage) },
+                    onSpokenLanguageChange = { playbackViewModel.setLanguages(state.settings.captionLanguage, it) },
+                    languageSelectionEnabled = state.preparation is PreparationState.Idle
                 )
             }
             composable(Routes.Settings) {
@@ -155,7 +185,13 @@ fun MainScreen(
                     onSaveCredentials = playbackViewModel::saveCredentials,
                     onTestConnection = playbackViewModel::testProviderConnection,
                     onCaptionSizeChange = playbackViewModel::setCaptionSize,
-                    onBrightnessChange = playbackViewModel::setTheaterBrightness
+                    onBrightnessChange = playbackViewModel::setTheaterBrightness,
+                    languages = state.languages,
+                    onLanguagesChange = playbackViewModel::setLanguages,
+                    modelStatus = state.modelStatus,
+                    onDownloadModel = playbackViewModel::downloadMultilingualModel,
+                    onCancelModel = playbackViewModel::cancelModelDownload,
+                    onDeleteModel = playbackViewModel::deleteMultilingualModel
                 )
             }
             composable(Routes.Player) {
@@ -182,6 +218,46 @@ fun MainScreen(
                 }
             }
         }
+    }
+    pendingImport?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text(stringResource(R.string.import_language_title)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.import_language_description))
+                    LanguageSelection(state.languages, importLanguage, importSpokenLanguage,
+                        { importLanguage = it }, { importSpokenLanguage = it }, allowUnknown = true)
+                }
+            },
+            confirmButton = { TextButton(onClick = {
+                pendingImport = null
+                playbackViewModel.loadLocalSubtitles(context, uri, importLanguage, importSpokenLanguage)
+            }) { Text(stringResource(R.string.open_captions)) } },
+            dismissButton = { TextButton(onClick = { pendingImport = null }) { Text(stringResource(android.R.string.cancel)) } }
+        )
+    }
+    state.preparationReview?.let { review ->
+        val automatic = AutoSeekCapabilities.evaluate(review.spokenLanguage, review.captionLanguage, true).mode == AutoSeekMode.AUTOMATIC
+        val downloads = (if (review.forTheater && automatic) 3 else 1) + if (automatic && review.spokenLanguage != "en") 1 else 0
+        AlertDialog(
+            onDismissRequest = playbackViewModel::dismissPreparationReview,
+            title = { Text(review.movie.title) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LanguageSelection(state.languages, review.captionLanguage, review.spokenLanguage,
+                        { playbackViewModel.updatePreparationLanguages(it, review.spokenLanguage) },
+                        { playbackViewModel.updatePreparationLanguages(review.captionLanguage, it) })
+                    Text(pluralStringResource(R.plurals.preparation_quota, downloads, downloads))
+                    if (automatic && review.spokenLanguage != "en") Text(stringResource(R.string.preparation_helper_cost))
+                    else if (!automatic) Text(stringResource(R.string.preparation_manual_cost))
+                }
+            },
+            confirmButton = { TextButton(onClick = playbackViewModel::confirmPreparation) {
+                Text(stringResource(if (review.forTheater) R.string.prepare_offline else R.string.watch_now))
+            } },
+            dismissButton = { TextButton(onClick = playbackViewModel::dismissPreparationReview) { Text(stringResource(android.R.string.cancel)) } }
+        )
     }
     // Register after navigation so Back cancels in-progress preparation first.
     BackHandler(enabled = state.preparation !is PreparationState.Idle) {

@@ -73,7 +73,7 @@ class CinemaUiTest {
         compose.onNodeWithText("Find a movie or TV show").assertIsDisplayed()
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Arrival · 2016"))
         compose.onNodeWithText("Arrival · 2016").assertIsDisplayed()
-        compose.onNodeWithText("3 caption tracks offline").assertIsDisplayed()
+        compose.onNodeWithText("English · Offline captions").assertIsDisplayed()
     }
 
     @Test
@@ -208,7 +208,7 @@ class CinemaUiTest {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
                 KaptusTheme {
                     PlayerScreen(
-                        player = playerState().copy(modelReady = ready.value), settings = AppSettings(),
+                        player = playerState().copy(modelReady = ready.value, syncState = SyncState.Idle, isPlaying = false), settings = AppSettings(),
                         onBack = {}, onPlayPause = {}, onSliderChange = {},
                         onSliderChangeFinished = {}, onAdjustCaption = {},
                         onStartSynchronization = { starts++ }, onResync = {}, onMicrophoneDenied = {},
@@ -222,6 +222,23 @@ class CinemaUiTest {
         compose.runOnIdle { assertEquals(0, starts) }
         compose.runOnUiThread { owner.lifecycle.currentState = Lifecycle.State.RESUMED }
         compose.runOnIdle { assertEquals(1, starts) }
+    }
+
+    @Test
+    fun reopeningASynchronizedPlayerDoesNotStartMicrophone() {
+        var starts = 0
+        compose.setContent {
+            KaptusTheme {
+                PlayerScreen(
+                    player = playerState(), settings = AppSettings(), onBack = {}, onPlayPause = {},
+                    onSliderChange = {}, onSliderChangeFinished = {}, onAdjustCaption = {},
+                    onStartSynchronization = { starts++ }, onResync = {}, onMicrophoneDenied = {},
+                    onStopForBackground = {}, onResumeAfterBackground = {}, onCaptionSizeChange = {},
+                    onBrightnessChange = {}, microphonePermissionOverride = true
+                )
+            }
+        }
+        compose.runOnIdle { assertEquals(0, starts) }
     }
 
     @Test

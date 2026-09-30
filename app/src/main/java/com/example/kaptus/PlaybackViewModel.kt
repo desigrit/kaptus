@@ -8,6 +8,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.kaptus.data.CaptionTrack
+import com.example.kaptus.data.CaptionLanguage
+import com.example.kaptus.data.CaptionTrackRole
+import com.example.kaptus.data.RecognitionTask
 import com.example.kaptus.data.LocalCaptionTrack
 import com.example.kaptus.data.MovieCandidate
 import com.example.kaptus.data.PreparedMovie
@@ -15,6 +18,14 @@ import com.example.kaptus.data.SubtitleEntry
 import com.example.kaptus.data.settings.AppSettings
 import com.example.kaptus.data.settings.ProviderCredentials
 import com.example.kaptus.speech.WhisperSpeechRecognitionEngine
+import com.example.kaptus.speech.SpeechModelStatus
+import com.example.kaptus.speech.SpeechRecognitionConfiguration
+import com.example.kaptus.sync.AutoSeekCapabilities
+import com.example.kaptus.sync.AutoSeekMode
+import com.example.kaptus.sync.AutoSeekValidationRegistry
+import com.example.kaptus.sync.ShippingValidationRegistry
+import com.example.kaptus.sync.CaptionMappingStore
+import com.example.kaptus.sync.MatchingPath
 import com.example.kaptus.sync.LocalSceneMatcher
 import com.example.kaptus.sync.MonotonicPlaybackClock
 import com.example.kaptus.sync.SyncCoordinator
@@ -34,7 +45,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 
-class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
+class PlaybackViewModel(
+    private val container: AppContainer,
+    private val validationRegistry: AutoSeekValidationRegistry = ShippingValidationRegistry
+) : ViewModel() {
     private val mutableUiState = MutableStateFlow(
         UiState(
             providerCredentials = container.credentials.load(),
@@ -45,6 +59,7 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
 
     private val clock = MonotonicPlaybackClock(viewModelScope)
     private val speechEngine = WhisperSpeechRecognitionEngine(container.applicationContext)
+    private val mappings = CaptionMappingStore(container.applicationContext.noBackupFilesDir.resolve("caption_mappings"))
     private val syncCoordinator = SyncCoordinator(
         scope = viewModelScope,
         engine = speechEngine,
@@ -53,17 +68,26 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
     )
     private var searchJob: Job? = null
     private var preparationJob: Job? = null
-    private var fallbackJob: Job? = null
     private var resumeAfterScrub = false
     private var currentMovie: MovieCandidate? = null
     private var candidateTracks: List<CaptionTrack> = emptyList()
     private val localCandidates = mutableMapOf<Long, LocalCaptionTrack>()
     private var currentTrackIndex = -1
+    private var helperTrack: LocalCaptionTrack? = null
+    private var activeCaptionLanguage = "en"
+    private var activeSpokenLanguage = "en"
+    private var modelDownloadJob: Job? = null
     private var synchronizationRequested = false
     private var lastPreparationRequest: (() -> Unit)? = null
     private val noticeIds = AtomicLong()
 
     init {
+        refreshLanguages()
+        viewModelScope.launch {
+            container.speechModels.state.collect { status ->
+                mutableUiState.value = mutableUiState.value.copy(modelStatus = status)
+            }
+        }
         viewModelScope.launch {
             clock.positionMs.collect { position ->
                 val player = mutableUiState.value.player ?: return@collect
@@ -89,9 +113,6 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
             syncCoordinator.state.collect { state ->
                 mutableUiState.value.player?.let { player ->
                     mutableUiState.value = mutableUiState.value.copy(player = player.copy(syncState = state))
-                }
-                if (state is SyncState.Error && state.kind == SyncErrorKind.NO_MATCH) {
-                    tryNextCaptionTrack()
                 }
             }
         }
@@ -143,10 +164,70 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun prepareMovie(movie: MovieCandidate, forTheater: Boolean) {
-        lastPreparationRequest = { prepareMovie(movie, forTheater) }
+    fun refreshLanguages() {
+        viewModelScope.launch {
+            container.subtitles.getLanguages().onSuccess { languages ->
+                mutableUiState.value = mutableUiState.value.copy(languages = languages)
+            }
+        }
+    }
+
+    fun setLanguages(captionLanguage: String, spokenLanguage: String) {
+        viewModelScope.launch { container.settings.setLanguages(captionLanguage, spokenLanguage) }
+    }
+
+    fun requestPreparation(movie: MovieCandidate, forTheater: Boolean) {
+        val settings = mutableUiState.value.settings
+        mutableUiState.value = mutableUiState.value.copy(
+            preparationReview = PreparationReview(movie, forTheater, settings.captionLanguage, settings.spokenLanguage)
+        )
+    }
+
+    fun dismissPreparationReview() {
+        mutableUiState.value = mutableUiState.value.copy(preparationReview = null)
+    }
+
+    fun confirmPreparation() {
+        val review = mutableUiState.value.preparationReview ?: return
+        dismissPreparationReview()
+        prepareMovie(review.movie, review.forTheater, review.captionLanguage, review.spokenLanguage)
+    }
+
+    fun updatePreparationLanguages(captionLanguage: String, spokenLanguage: String) {
+        mutableUiState.value.preparationReview?.let {
+            mutableUiState.value = mutableUiState.value.copy(
+                preparationReview = it.copy(captionLanguage = captionLanguage, spokenLanguage = spokenLanguage)
+            )
+        }
+    }
+
+    fun downloadMultilingualModel() {
+        if (modelDownloadJob?.isActive == true) return
+        modelDownloadJob = viewModelScope.launch { container.speechModels.download() }
+    }
+
+    fun cancelModelDownload() {
+        container.speechModels.cancel()
+        modelDownloadJob?.cancel()
+    }
+
+    fun deleteMultilingualModel() {
+        viewModelScope.launch { container.speechModels.delete() }
+    }
+
+    fun prepareMovie(movie: MovieCandidate, forTheater: Boolean,
+                     captionLanguage: String = mutableUiState.value.settings.captionLanguage,
+                     spokenLanguage: String = mutableUiState.value.settings.spokenLanguage) {
+        lastPreparationRequest = { prepareMovie(movie, forTheater, captionLanguage, spokenLanguage) }
         preparationJob?.cancel()
         preparationJob = viewModelScope.launch {
+            container.settings.setLanguages(captionLanguage, spokenLanguage)
+            activeCaptionLanguage = captionLanguage
+            activeSpokenLanguage = spokenLanguage
+            helperTrack = null
+            val selectedMovie = movie.copy(spokenLanguage = spokenLanguage)
+            val selectedCapability = capability(captionLanguage, spokenLanguage)
+            val eligible = selectedCapability.mode == AutoSeekMode.AUTOMATIC
             mutableUiState.value = mutableUiState.value.copy(
                 preparation = PreparationState.Working(
                     text(R.string.preparation_finding_captions),
@@ -155,7 +236,7 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                 ),
                 searchError = null
             )
-            val tracks = container.subtitles.findTracks(movie).also {
+            val tracks = container.subtitles.findTracks(selectedMovie, captionLanguage).also {
                 currentCoroutineContext().ensureActive()
             }.getOrElse { error ->
                 mutableUiState.value = mutableUiState.value.copy(
@@ -165,17 +246,18 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
             }
             if (tracks.isEmpty()) {
                 mutableUiState.value = mutableUiState.value.copy(
-                    preparation = PreparationState.Failed(text(R.string.error_no_complete_captions))
+                    preparation = PreparationState.Failed(text(R.string.language_no_captions,
+                        com.example.kaptus.ui.screens.captionLanguageName(captionLanguage, mutableUiState.value.languages)))
                 )
                 return@launch
             }
-            currentMovie = movie
+            currentMovie = selectedMovie
             candidateTracks = tracks.take(3)
             localCandidates.clear()
-            val cachedTracks = container.subtitles.loadPrepared(movie.id).also {
+            val cachedTracks = container.subtitles.loadPrepared(movie.id, captionLanguage).also {
                 currentCoroutineContext().ensureActive()
             }.getOrDefault(emptyList()).associateBy { it.track.fileId }
-            val requested = if (forTheater) candidateTracks.size else 1
+            val requested = if (forTheater && eligible) candidateTracks.size else 1
             val downloaded = mutableListOf<LocalCaptionTrack>()
             var downloadError: String? = null
             candidateTracks.take(requested).forEachIndexed { index, track ->
@@ -208,7 +290,16 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                 )
                 return@launch
             }
-            val modelPrepared = if (forTheater) {
+            if (eligible && MatchingPath.MATCHING_HELPER in selectedCapability.paths) {
+                helperTrack = container.subtitles.loadPrepared(movie.id, helperLanguage(spokenLanguage), CaptionTrackRole.MATCHING_HELPER)
+                    .getOrDefault(emptyList()).firstOrNull()
+                if (helperTrack == null) {
+                    val helper = container.subtitles.findTracks(selectedMovie, helperLanguage(spokenLanguage))
+                        .getOrDefault(emptyList()).firstOrNull()?.copy(role = CaptionTrackRole.MATCHING_HELPER)
+                    helperTrack = helper?.let { container.subtitles.download(it).getOrNull() }
+                }
+            }
+            val modelPrepared = if (eligible && forTheater) {
                 mutableUiState.value = mutableUiState.value.copy(
                     preparation = PreparationState.Working(
                         text(R.string.preparation_checking_model),
@@ -216,13 +307,13 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                         requested
                     )
                 )
-                runCatching { speechEngine.prepare() }.also {
+                runCatching { prepareSelectedSpeech() }.also {
                     currentCoroutineContext().ensureActive()
                 }.isSuccess
             } else {
-                speechEngine.isReady
+                eligible && speechEngine.isReady
             }
-            if (forTheater && !modelPrepared) {
+            if (forTheater && eligible && !modelPrepared) {
                 mutableUiState.value = mutableUiState.value.copy(
                     preparation = PreparationState.Failed(text(R.string.error_model_prepare_failed))
                 )
@@ -237,26 +328,24 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
             mutableUiState.value = mutableUiState.value.copy(
                 preparation = PreparationState.Idle,
                 notice = notice(
-                    if (forTheater && downloaded.size == requested) {
-                        container.applicationContext.resources.getQuantityString(
-                            R.plurals.prepared_for_theater_notice,
-                            requested,
-                            requested
-                        )
-                    } else text(R.string.captions_ready_notice)
+                    if (forTheater && downloaded.size == requested && eligible) text(R.string.auto_seek_ready)
+                    else if (forTheater) text(R.string.captions_saved_manual)
+                    else text(R.string.captions_ready_notice)
                 )
             )
         }
     }
 
-    fun openPreparedMovie(featureId: String) {
-        lastPreparationRequest = { openPreparedMovie(featureId) }
+    fun openPreparedMovie(featureId: String,
+                          captionLanguage: String = mutableUiState.value.settings.captionLanguage,
+                          spokenLanguage: String? = null) {
+        lastPreparationRequest = { openPreparedMovie(featureId, captionLanguage, spokenLanguage) }
         preparationJob?.cancel()
         preparationJob = viewModelScope.launch {
             mutableUiState.value = mutableUiState.value.copy(
                 preparation = PreparationState.Working(text(R.string.preparation_opening_captions), 0, 1)
             )
-            container.subtitles.loadPrepared(featureId).also {
+            container.subtitles.loadPrepared(featureId, captionLanguage).also {
                 currentCoroutineContext().ensureActive()
             }.fold(
                 onSuccess = { tracks ->
@@ -266,7 +355,13 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                             preparation = PreparationState.Failed(text(R.string.error_downloaded_caption_missing))
                         )
                     } else {
-                        val modelPrepared = runCatching { speechEngine.prepare() }.also {
+                        activeCaptionLanguage = first.track.language
+                        activeSpokenLanguage = spokenLanguage ?: first.movie.spokenLanguage
+                        helperTrack = if (activeSpokenLanguage != "en")
+                            container.subtitles.loadPrepared(featureId, helperLanguage(activeSpokenLanguage), CaptionTrackRole.MATCHING_HELPER)
+                                .getOrDefault(emptyList()).firstOrNull() else null
+                        val eligible = capability(activeCaptionLanguage, activeSpokenLanguage).mode == AutoSeekMode.AUTOMATIC
+                        val modelPrepared = eligible && runCatching { prepareSelectedSpeech() }.also {
                             currentCoroutineContext().ensureActive()
                         }.isSuccess
                         currentMovie = first.movie
@@ -276,7 +371,7 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                         currentTrackIndex = 0
                         openTrack(
                             first,
-                            theaterPrepared = tracks.size >= 3 && modelPrepared,
+                            theaterPrepared = true,
                             modelReady = modelPrepared
                         )
                         mutableUiState.value = mutableUiState.value.copy(preparation = PreparationState.Idle)
@@ -291,9 +386,10 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun loadLocalSubtitles(context: Context, uri: Uri) {
+    fun loadLocalSubtitles(context: Context, uri: Uri, captionLanguage: String = "und",
+                           spokenLanguage: String = mutableUiState.value.settings.spokenLanguage) {
         val applicationContext = context.applicationContext
-        lastPreparationRequest = { loadLocalSubtitles(applicationContext, uri) }
+        lastPreparationRequest = { loadLocalSubtitles(applicationContext, uri, captionLanguage, spokenLanguage) }
         preparationJob?.cancel()
         preparationJob = viewModelScope.launch {
             mutableUiState.value = mutableUiState.value.copy(
@@ -310,7 +406,11 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                             preparation = PreparationState.Failed(text(R.string.error_unreadable_srt))
                         )
                     } else {
-                        val modelPrepared = runCatching { speechEngine.prepare() }.also {
+                        activeCaptionLanguage = captionLanguage
+                        activeSpokenLanguage = spokenLanguage
+                        helperTrack = null
+                        val eligible = capability(captionLanguage, spokenLanguage).mode == AutoSeekMode.AUTOMATIC
+                        val modelPrepared = eligible && runCatching { prepareSelectedSpeech() }.also {
                             currentCoroutineContext().ensureActive()
                         }.isSuccess
                         currentMovie = null
@@ -321,7 +421,7 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                             entries,
                             fileName,
                             fileName,
-                            theaterPrepared = modelPrepared,
+                            theaterPrepared = true,
                             modelReady = modelPrepared
                         )
                         mutableUiState.value = mutableUiState.value.copy(preparation = PreparationState.Idle)
@@ -345,6 +445,7 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
         val credentials = ProviderCredentials(apiKey.trim(), username.trim(), password)
         container.credentials.save(credentials)
         container.subtitles.resetSession()
+        refreshLanguages()
         mutableUiState.value = mutableUiState.value.copy(
             providerCredentials = credentials,
             providerConfigured = credentials.isConfigured,
@@ -391,11 +492,13 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun startSynchronization() {
+        if (mutableUiState.value.player?.autoSeekAvailable != true) return
         synchronizationRequested = true
         syncCoordinator.start()
     }
 
     fun resync() {
+        if (mutableUiState.value.player?.autoSeekAvailable != true) return
         synchronizationRequested = true
         syncCoordinator.resync()
     }
@@ -405,9 +508,7 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun resumeAfterBackground() {
-        if (mutableUiState.value.player != null && synchronizationRequested) {
-            syncCoordinator.start()
-        }
+        // The anchored clock advances without capture. Only Re-sync starts a new attempt.
     }
 
     fun playPause() {
@@ -484,48 +585,19 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun tryNextCaptionTrack() {
-        if (fallbackJob?.isActive == true) return
-        if (currentMovie == null) return
-        fallbackJob = viewModelScope.launch {
-            for (nextIndex in (currentTrackIndex + 1)..candidateTracks.lastIndex.coerceAtMost(2)) {
-                val nextTrack = candidateTracks[nextIndex]
-                mutableUiState.value = mutableUiState.value.copy(
-                    notice = notice(text(R.string.trying_alternative_caption))
-                )
-                val local = localCandidates[nextTrack.fileId]
-                    ?: container.subtitles.download(nextTrack).getOrNull()?.also {
-                        localCandidates[it.track.fileId] = it
-                    }
-                if (local != null) {
-                    currentTrackIndex = nextIndex
-                    openTrack(
-                        local,
-                        theaterPrepared = localCandidates.size >= candidateTracks.size,
-                        modelReady = mutableUiState.value.player?.modelReady ?: speechEngine.isReady
-                    )
-                    synchronizationRequested = true
-                    syncCoordinator.start()
-                    return@launch
-                }
-            }
-            mutableUiState.value = mutableUiState.value.copy(
-                notice = notice(text(R.string.error_no_remaining_caption))
-            )
-        }
-    }
-
     private fun openTrack(
         local: LocalCaptionTrack,
         theaterPrepared: Boolean,
         modelReady: Boolean = speechEngine.isReady
     ) {
+        activeCaptionLanguage = local.track.language
         openEntries(
             entries = local.entries,
             title = local.movie.title,
             sourceName = local.track.fileName,
             theaterPrepared = theaterPrepared,
-            modelReady = modelReady
+            modelReady = modelReady,
+            displayHash = local.contentHash
         )
     }
 
@@ -534,13 +606,29 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
         title: String,
         sourceName: String,
         theaterPrepared: Boolean,
-        modelReady: Boolean = speechEngine.isReady
+        modelReady: Boolean = speechEngine.isReady,
+        displayHash: String = ""
     ) {
         synchronizationRequested = false
         clock.setRate(1.0)
         clock.setDuration(entries.lastOrNull()?.endTimeMs ?: 0L)
         clock.seekTo(0L)
         syncCoordinator.load(entries)
+        val helperHash = helperTrack?.contentHash.orEmpty()
+        syncCoordinator.configureLanguages(
+            spokenLanguage = activeSpokenLanguage,
+            captionLanguage = activeCaptionLanguage,
+            modelPath = if (activeSpokenLanguage == "en") null else container.speechModels.multilingualModelPath,
+            helperCaptions = helperTrack?.entries.orEmpty(),
+            displayHash = displayHash,
+            helperHash = helperHash,
+            validationRegistry = validationRegistry,
+            savedMapping = mappings.load(displayHash, helperHash),
+            onValidatedMapping = { mapping ->
+                viewModelScope.launch(Dispatchers.IO) { runCatching { mappings.save(mapping) } }
+            }
+        )
+        val autoSeek = capability(activeCaptionLanguage, activeSpokenLanguage).mode == AutoSeekMode.AUTOMATIC
         mutableUiState.value = mutableUiState.value.copy(
             player = PlayerUiState(
                 title = title,
@@ -548,7 +636,10 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
                 subtitles = entries,
                 totalDurationMs = entries.lastOrNull()?.endTimeMs ?: 0L,
                 theaterPrepared = theaterPrepared,
-                modelReady = modelReady
+                modelReady = autoSeek && modelReady,
+                captionLanguage = activeCaptionLanguage,
+                spokenLanguage = activeSpokenLanguage,
+                autoSeekAvailable = autoSeek
             ),
             playerVersion = mutableUiState.value.playerVersion + 1
         )
@@ -570,6 +661,23 @@ class PlaybackViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     private fun notice(message: String) = UiNotice(noticeIds.incrementAndGet(), message)
+
+    private fun capability(captionLanguage: String, spokenLanguage: String) =
+        AutoSeekCapabilities.evaluate(spokenLanguage, captionLanguage,
+            if (spokenLanguage == "en") true else container.speechModels.multilingualModelPath != null,
+            validationRegistry)
+
+    private fun helperLanguage(spokenLanguage: String) = if (spokenLanguage == "zh") "zh-cn" else spokenLanguage
+
+    private suspend fun prepareSelectedSpeech() {
+        speechEngine.configure(SpeechRecognitionConfiguration(
+            sourceLanguage = activeSpokenLanguage,
+            task = if (activeSpokenLanguage == "en" || helperTrack != null) RecognitionTask.TRANSCRIBE else RecognitionTask.TRANSLATE,
+            modelPath = if (activeSpokenLanguage == "en") null else container.speechModels.multilingualModelPath,
+            includeTranslation = activeSpokenLanguage != "en" && helperTrack != null
+        ))
+        speechEngine.prepare()
+    }
 
     private fun text(resourceId: Int, vararg arguments: Any): String =
         container.applicationContext.getString(resourceId, *arguments)
@@ -603,7 +711,10 @@ data class UiState(
     val playerVersion: Long = 0L,
     val settings: AppSettings = AppSettings(),
     val isTestingProvider: Boolean = false,
-    val notice: UiNotice? = null
+    val notice: UiNotice? = null,
+    val languages: List<CaptionLanguage> = listOf(CaptionLanguage("en", "English")),
+    val modelStatus: SpeechModelStatus = SpeechModelStatus.NotDownloaded,
+    val preparationReview: PreparationReview? = null
 )
 
 data class PlayerUiState(
@@ -618,7 +729,10 @@ data class PlayerUiState(
     val captionDelayMs: Long = 0L,
     val syncState: SyncState = SyncState.Idle,
     val theaterPrepared: Boolean,
-    val modelReady: Boolean
+    val modelReady: Boolean,
+    val captionLanguage: String = "en",
+    val spokenLanguage: String = "en",
+    val autoSeekAvailable: Boolean = captionLanguage == "en" && spokenLanguage == "en"
 )
 
 private fun PlayerUiState?.orEmpty(): PlayerUiState = this ?: PlayerUiState(
@@ -637,3 +751,6 @@ sealed interface PreparationState {
 }
 
 data class UiNotice(val id: Long, val message: String)
+
+data class PreparationReview(val movie: MovieCandidate, val forTheater: Boolean,
+                             val captionLanguage: String, val spokenLanguage: String)
