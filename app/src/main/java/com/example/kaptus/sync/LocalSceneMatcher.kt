@@ -51,8 +51,8 @@ class LocalSceneMatcher(
     ): MatchResult {
         if (segment.words.isEmpty() || index.words.isEmpty()) return MatchResult.NoMatch
 
-        val recognized = segment.words.mapIndexedNotNull { sourceIndex, word ->
-            CaptionTextNormalizer.token(word.text)?.let { token ->
+        val recognized = segment.words.flatMapIndexed { sourceIndex, word ->
+            CaptionTextNormalizer.tokens(word.text).map { token ->
                 NormalizedRecognition(
                     value = token,
                     sourceIndex = sourceIndex,
@@ -68,11 +68,8 @@ class LocalSceneMatcher(
         val votes = mutableMapOf<Int, Float>()
         recognized.forEachIndexed { queryIndex, word ->
             index.positions[word.value]?.forEach { captionPosition ->
-                val captionWord = index.words[captionPosition]
-                if (expectedTimeMs == null || abs(captionWord.movieTimeMs - expectedTimeMs) <= NEARBY_WINDOW_MS) {
-                    votes[captionPosition - queryIndex] =
-                        votes.getOrDefault(captionPosition - queryIndex, 0f) + word.weight
-                }
+                votes[captionPosition - queryIndex] =
+                    votes.getOrDefault(captionPosition - queryIndex, 0f) + word.weight
             }
         }
         if (votes.isEmpty()) return MatchResult.NoMatch
@@ -83,8 +80,11 @@ class LocalSceneMatcher(
             .map { scoreCandidate(recognized, segment, index, it.key) }
             .sortedByDescending { it.score }
 
-        val best = candidates.firstOrNull() ?: return MatchResult.NoMatch
-        val runnerUp = candidates.drop(1)
+        // Near-position searches may prioritize a scene, but ambiguity is always checked globally.
+        val best = candidates.firstOrNull { result -> expectedTimeMs == null ||
+            result.anchor?.let { abs(it.movieTimeMs - expectedTimeMs) <= NEARBY_WINDOW_MS } == true
+        } ?: return MatchResult.NoMatch
+        val runnerUp = candidates.filter { it !== best }
             .firstOrNull { other ->
                 best.anchor == null || other.anchor == null ||
                     abs(other.anchor.movieTimeMs - best.anchor.movieTimeMs) > DISTINCT_RESULT_MS
@@ -220,7 +220,7 @@ class LocalSceneMatcher(
             else -> 0.55f
         }
 
-        const val MAX_CANDIDATES = 12
+        const val MAX_CANDIDATES = 32
         const val WINDOW_PADDING = 8
         const val NEARBY_WINDOW_MS = 120_000L
         const val DISTINCT_RESULT_MS = 30_000L
@@ -238,25 +238,41 @@ class LocalSceneMatcher(
 object CaptionTextNormalizer {
     private val bracketedCue = Regex("\\[[^]]*]|\\([^)]*\\)")
     private val htmlTag = Regex("<[^>]+>")
-    private val speakerPrefix = Regex("(?m)^\\s*(?:[-–—]\\s*)?[A-Z][A-Za-z0-9 .'-]{1,24}:\\s*")
+    private val speakerPrefix = Regex("(?m)^\\s*(?:[-–\\u2014]\\s*)?[A-Z][A-Za-z0-9 .'-]{1,24}:\\s*")
     private val apostrophe = Regex("['‘’`´]")
-    private val combiningMark = Regex("\\p{M}+")
-    private val tokenPattern = Regex("[a-z0-9]+")
+    private val tokenPattern = Regex("[\\p{L}\\p{N}][\\p{L}\\p{N}\\p{M}]*")
+    private val cjkWhitespace = Regex("([\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}])\\s+(?=[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}])")
 
-    fun tokens(text: String): List<String> = tokenPattern
-        .findAll(
+    fun tokens(text: String): List<String> {
+        val normalized =
             Normalizer.normalize(
                 text.replace(htmlTag, " ")
                 .replace(bracketedCue, " ")
                 .replace(speakerPrefix, " ")
                 .replace(apostrophe, ""),
-                Normalizer.Form.NFKD
+                Normalizer.Form.NFC
             )
-                .replace(combiningMark, "")
                 .lowercase(Locale.ROOT)
-        )
-        .map { it.value }
-        .toList()
+        return tokenPattern.findAll(normalized.replace(cjkWhitespace, "$1")).flatMap { match ->
+            val points = match.value.codePoints().toArray()
+            val runs = mutableListOf<String>()
+            var offset = 0
+            while (offset < points.size) {
+                val cjk = isCjk(points[offset])
+                var end = offset + 1
+                while (end < points.size && isCjk(points[end]) == cjk) end++
+                if (cjk && end - offset > 1) {
+                    for (index in offset until end - 1) runs += String(points, index, 2)
+                } else runs += String(points, offset, end - offset)
+                offset = end
+            }
+            runs.asSequence()
+        }.toList()
+    }
+
+    private fun isCjk(point: Int): Boolean = Character.UnicodeScript.of(point) in setOf(
+        Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA
+    )
 
     fun token(text: String): String? = tokens(text).firstOrNull()
 }

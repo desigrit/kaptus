@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_speech_model_download">Could not download the speech model. Check your connection and try again.</string>
+</resources>
