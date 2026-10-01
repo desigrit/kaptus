@@ -251,6 +251,9 @@ fun MainScreen(
                     Text(pluralStringResource(R.plurals.preparation_quota, downloads, downloads))
                     if (automatic && review.spokenLanguage != "en") Text(stringResource(R.string.preparation_helper_cost))
                     else if (!automatic) Text(stringResource(R.string.preparation_manual_cost))
+                    if (automatic && review.spokenLanguage != "en" && state.modelStatus !is com.example.kaptus.speech.SpeechModelStatus.Ready) {
+                        Text(stringResource(R.string.preparation_model_needed))
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = playbackViewModel::confirmPreparation) {

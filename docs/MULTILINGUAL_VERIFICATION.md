@@ -1,11 +1,11 @@
 # Multilingual preview verification
 
-Checked on September 30, 2026, for Android `0.3.0-preview`. These are automated and emulator checks, not physical-phone language qualification.
+Checked on September 30, 2026, for Android `0.3.1-preview`. These are automated and emulator checks of the enabled multilingual implementation, not physical-phone accuracy or speed benchmarks.
 
 | Check | Result |
 | --- | --- |
-| Kotlin unit tests | 70 passed |
-| Android 16 / API 36 emulator tests | 24 passed |
+| Kotlin unit tests | 78 passed |
+| Android 16 / API 36 emulator tests | 26 passed |
 | Acceptance-report validator | 10 Python tests passed |
 | Android lint | No errors, 45 warnings and 2 hints |
 | Debug APK | Built, ARM64 and x86_64 included |
@@ -15,7 +15,7 @@ Checked on September 30, 2026, for Android `0.3.0-preview`. These are automated 
 
 Tests cover exact-language ranking and cache isolation, migration of existing movie/episode history, shared-file display/helper roles, Unicode decoding, malformed SRT recovery, split-file rejection, model integrity and interrupted downloads, stale recognition sessions, global ambiguity, helper timing mappings and translated matching. Player regressions cover manual-language microphone gating, backgrounding during delayed resync, clock retention, rotation and large text.
 
-The final parser and provider cleanup was verified by the expanded unit suite and rebuilt APKs. The emulator suite also passed after the new player, language and model-cancellation changes. Native Material screens were inspected on the emulator.
+The final activation update passed the complete unit and emulator suites, lint and both APK builds. New regressions cover all nine default language pairs, Hindi helper and direct translation, model removal, late readiness without automatic capture, and explicit listening after background return. Native Material screens were inspected on the emulator.
 
 <p>
   <img src="images/multilingual-search.png" width="280" alt="Actual Android movie search with separate caption and spoken language choices">
@@ -24,7 +24,9 @@ The final parser and provider cleanup was verified by the expanded unit suite an
 
 These captures use the API 36 emulator, without a simulated device frame. They show the existing cinema palette and native controls.
 
-No new spoken-language pair is enabled by these results. There were no physical ARM64 phone trials, native-speaker-reviewed accuracy measurements, live-account provider tests or two-hour hardware sessions in this workspace. See [the language matrix and qualification protocol](MULTILINGUAL.md) before enabling a new pair.
+The preview makes Mandarin, Japanese, Spanish, French, German, Korean, Hindi, Telugu and Tamil audio with English captions available after downloading the multilingual model. English audio with English captions retains its bundled model. Other combinations use manual timing.
+
+These features are enabled without a physical-device qualification gate. There were no physical ARM64 phone trials, native-speaker-reviewed accuracy measurements, live-account provider tests or two-hour hardware sessions in this workspace. Their availability does not establish the 30-second acquisition or one-second timing targets. See [the language matrix and planned regression benchmarks](MULTILINGUAL.md) for the matching paths, known limits and reproducible acceptance-report protocol.
 
 Run the checks locally with JDK 17 and Android SDK 36:
 

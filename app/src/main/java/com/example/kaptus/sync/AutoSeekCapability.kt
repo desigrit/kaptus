@@ -1,7 +1,7 @@
 package com.example.kaptus.sync
 
 enum class AutoSeekMode { AUTOMATIC, MANUAL, MODEL_REQUIRED }
-enum class AutoSeekReason { READY, UNSUPPORTED_PAIR, AWAITING_VALIDATION, MODEL_MISSING }
+enum class AutoSeekReason { READY, UNSUPPORTED_PAIR, PATH_UNAVAILABLE, MODEL_MISSING }
 enum class MatchingPath { ENGLISH, MATCHING_HELPER, DIRECT_TRANSLATION }
 
 data class AutoSeekCapability(
@@ -12,14 +12,18 @@ data class AutoSeekCapability(
     val canListen: Boolean get() = mode == AutoSeekMode.AUTOMATIC
 }
 
-/** A pair is activated only after the platform and matching path pass device validation. */
-fun interface AutoSeekValidationRegistry {
-    fun isValidated(spokenLanguage: String, path: MatchingPath): Boolean
+/** Chooses the matching paths available for a supported spoken language. */
+fun interface AutoSeekPathPolicy {
+    fun isEnabled(spokenLanguage: String, path: MatchingPath): Boolean
 }
 
-object ShippingValidationRegistry : AutoSeekValidationRegistry {
-    override fun isValidated(spokenLanguage: String, path: MatchingPath): Boolean =
-        spokenLanguage == "en" && path == MatchingPath.ENGLISH
+object SupportedAutoSeekPaths : AutoSeekPathPolicy {
+    override fun isEnabled(spokenLanguage: String, path: MatchingPath): Boolean = when {
+        spokenLanguage == "en" -> path == MatchingPath.ENGLISH
+        spokenLanguage in AutoSeekCapabilities.targetSpokenLanguages ->
+            path == MatchingPath.MATCHING_HELPER || path == MatchingPath.DIRECT_TRANSLATION
+        else -> false
+    }
 }
 
 object AutoSeekCapabilities {
@@ -29,17 +33,17 @@ object AutoSeekCapabilities {
         spokenLanguage: String,
         captionLanguage: String,
         modelReady: Boolean,
-        registry: AutoSeekValidationRegistry = ShippingValidationRegistry
+        pathPolicy: AutoSeekPathPolicy = SupportedAutoSeekPaths
     ): AutoSeekCapability {
         if (captionLanguage != "en" || (spokenLanguage != "en" && spokenLanguage !in targetSpokenLanguages)) {
             return AutoSeekCapability(AutoSeekMode.MANUAL, AutoSeekReason.UNSUPPORTED_PAIR)
         }
         val paths = if (spokenLanguage == "en") setOf(MatchingPath.ENGLISH) else
             setOf(MatchingPath.MATCHING_HELPER, MatchingPath.DIRECT_TRANSLATION)
-        val validated = paths.filter { registry.isValidated(spokenLanguage, it) }.toSet()
-        if (validated.isEmpty()) return AutoSeekCapability(AutoSeekMode.MANUAL, AutoSeekReason.AWAITING_VALIDATION)
-        if (!modelReady) return AutoSeekCapability(AutoSeekMode.MODEL_REQUIRED, AutoSeekReason.MODEL_MISSING, validated)
-        return AutoSeekCapability(AutoSeekMode.AUTOMATIC, AutoSeekReason.READY, validated)
+        val enabled = paths.filter { pathPolicy.isEnabled(spokenLanguage, it) }.toSet()
+        if (enabled.isEmpty()) return AutoSeekCapability(AutoSeekMode.MANUAL, AutoSeekReason.PATH_UNAVAILABLE)
+        if (!modelReady) return AutoSeekCapability(AutoSeekMode.MODEL_REQUIRED, AutoSeekReason.MODEL_MISSING, enabled)
+        return AutoSeekCapability(AutoSeekMode.AUTOMATIC, AutoSeekReason.READY, enabled)
     }
 }
 

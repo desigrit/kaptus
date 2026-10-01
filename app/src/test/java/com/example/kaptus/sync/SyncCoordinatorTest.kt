@@ -63,7 +63,7 @@ class SyncCoordinatorTest {
     @Test fun directTranslationDoesNotRunAnUnneededSourcePass() = runTest {
         val engine = FakeSpeechEngine()
         val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
-        coordinator.configureLanguages("es", "en", "verified-model", validationRegistry = AutoSeekValidationRegistry {
+        coordinator.configureLanguages("es", "en", "verified-model", pathPolicy = AutoSeekPathPolicy {
             language, path -> language == "es" && path == MatchingPath.DIRECT_TRANSLATION
         })
         coordinator.load(captions())
@@ -101,16 +101,16 @@ class SyncCoordinatorTest {
     }
 
     @Test
-    fun unsupportedAndUnvalidatedPairsNeverStartTheMicrophone() = runTest {
+    fun unsupportedAndMissingModelPairsNeverStartTheMicrophone() = runTest {
         val engine = FakeSpeechEngine()
         val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
-        coordinator.configureLanguages("es", "en", modelPath = "verified-model")
+        coordinator.configureLanguages("es", "en")
         coordinator.load(captions())
         coordinator.start()
         coordinator.resync()
         runCurrent()
         assertFalse(engine.started)
-        assertEquals(AutoSeekReason.AWAITING_VALIDATION, coordinator.capability.reason)
+        assertEquals(AutoSeekReason.MODEL_MISSING, coordinator.capability.reason)
         coordinator.configureLanguages("en", "fr")
         coordinator.start()
         runCurrent()
@@ -126,7 +126,7 @@ class SyncCoordinatorTest {
         val coordinator = SyncCoordinator(this, engine, QueueMatcher(
             result(anchor(6, 16_000)), result(anchor(9, 19_000)), result(anchor(12, 22_000))
         ), clock) { 15_000_000_000L }
-        coordinator.configureLanguages("es", "en", "verified-model", validationRegistry = AutoSeekValidationRegistry {
+        coordinator.configureLanguages("es", "en", "verified-model", pathPolicy = AutoSeekPathPolicy {
             language, path -> language == "es" && path == MatchingPath.DIRECT_TRANSLATION
         })
         coordinator.load(captions())
@@ -156,7 +156,7 @@ class SyncCoordinatorTest {
             result(anchor(12, 42_000)), result(anchor(12, 22_000))
         ), FakeClock()) { 12_000_000_000L }
         coordinator.configureLanguages("ja", "en", "verified-model", captions(), "display-digest", "helper-digest",
-            AutoSeekValidationRegistry { language, path -> language == "ja" && path == MatchingPath.MATCHING_HELPER },
+            AutoSeekPathPolicy { language, path -> language == "ja" && path == MatchingPath.MATCHING_HELPER },
             onValidatedMapping = mappings::add)
         coordinator.load(captions())
         runCurrent()
@@ -173,6 +173,176 @@ class SyncCoordinatorTest {
         assertEquals(18_000L, mappings.single().displayTimeAt(38_000, "display-digest", "helper-digest"))
         assertEquals(null, mappings.single().displayTimeAt(80_000, "display-digest", "helper-digest"))
         assertEquals(null, mappings.single().displayTimeAt(38_000, "different-digest", "helper-digest"))
+        coordinator.close()
+    }
+
+    @Test
+    fun allRequestedLanguagesUseTranslationWhenNoHelperIsSaved() = runTest {
+        for (language in AutoSeekCapabilities.targetSpokenLanguages) {
+            val engine = FakeSpeechEngine()
+            val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
+            coordinator.configureLanguages(language, "en", "verified-model")
+            coordinator.load(captions())
+            runCurrent()
+            coordinator.start()
+            runCurrent()
+            assertTrue("$language should start with the shared model", engine.started)
+            assertEquals(language, engine.configuration.sourceLanguage)
+            assertEquals("verified-model", engine.configuration.modelPath)
+            assertEquals(RecognitionTask.TRANSLATE, engine.configuration.task)
+            assertFalse(engine.configuration.includeTranslation)
+            coordinator.close()
+        }
+    }
+
+    @Test
+    fun aSavedHindiHelperUsesSourceRecognitionAndAnEnglishCrossCheckByDefault() = runTest {
+        val engine = FakeSpeechEngine()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
+        coordinator.configureLanguages("hi", "en", "verified-model", helperCaptions = captions())
+        coordinator.load(captions())
+        runCurrent()
+        coordinator.start()
+        runCurrent()
+        assertEquals(RecognitionTask.TRANSCRIBE, engine.configuration.task)
+        assertTrue(engine.configuration.includeTranslation)
+        assertEquals("hi", engine.configuration.sourceLanguage)
+        coordinator.close()
+    }
+
+    @Test
+    fun anUnsuitableHelperFallsBackToIndependentEnglishTranslationEvidence() = runTest {
+        val engine = FakeSpeechEngine()
+        val clock = FakeClock()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(
+            MatchResult.NoMatch, result(anchor(6, 16_000)),
+            MatchResult.NoMatch, result(anchor(12, 22_000))
+        ), clock) { 15_000_000_000L }
+        coordinator.configureLanguages("hi", "en", "verified-model", helperCaptions = captions())
+        coordinator.load(captions())
+        runCurrent()
+        coordinator.start()
+        runCurrent()
+        engine.emitSegment(0, 6, RecognitionTask.TRANSCRIBE)
+        engine.emitSegment(0, 6, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertTrue(clock.seeks.isEmpty())
+        engine.emitSegment(6, 12, RecognitionTask.TRANSCRIBE)
+        engine.emitSegment(6, 12, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertEquals(25_000L, clock.seeks.single())
+        assertTrue(coordinator.state.value is SyncState.Synchronized)
+        assertFalse(engine.started)
+        coordinator.close()
+    }
+
+    @Test
+    fun englishKeepsTheBundledModelAndDoesNotTranscribeAnUnrelatedHelper() = runTest {
+        val engine = FakeSpeechEngine()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), FakeClock())
+        coordinator.configureLanguages("en", "en", modelPath = "multilingual-model", helperCaptions = captions())
+        coordinator.load(captions())
+        coordinator.updateModelPath("multilingual-model")
+        runCurrent()
+        coordinator.start()
+        runCurrent()
+        assertEquals("en", engine.configuration.sourceLanguage)
+        assertEquals(null, engine.configuration.modelPath)
+        assertEquals(RecognitionTask.TRANSCRIBE, engine.configuration.task)
+        assertFalse(engine.configuration.includeTranslation)
+        coordinator.close()
+    }
+
+    @Test
+    fun modelBecomingReadyEnablesAnOpenHindiTrackWithoutResettingClockOrStartingCapture() = runTest {
+        val engine = FakeSpeechEngine()
+        val clock = FakeClock()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), clock)
+        coordinator.configureLanguages("hi", "en")
+        coordinator.load(captions())
+        runCurrent()
+        clock.seekTo(12_345)
+        clock.play()
+        coordinator.start()
+        coordinator.resync()
+        runCurrent()
+        assertFalse(engine.started)
+        assertEquals(AutoSeekMode.MODEL_REQUIRED, coordinator.capability.mode)
+
+        coordinator.updateModelPath("verified-model")
+        runCurrent()
+        assertTrue(coordinator.capability.canListen)
+        assertFalse("Model readiness alone must not start the microphone", engine.started)
+        assertEquals(12_345L, clock.position.value)
+        assertTrue(clock.playing.value)
+        assertTrue(coordinator.state.value is SyncState.Idle)
+
+        coordinator.resync()
+        runCurrent()
+        assertTrue(engine.started)
+        assertEquals("hi", engine.configuration.sourceLanguage)
+        assertEquals("verified-model", engine.configuration.modelPath)
+        coordinator.close()
+    }
+
+    @Test
+    fun removingTheModelDuringAcquisitionStopsCaptureAndPreservesManualPlayback() = runTest {
+        val engine = FakeSpeechEngine()
+        val clock = FakeClock()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(), clock)
+        coordinator.configureLanguages("hi", "en", "verified-model")
+        coordinator.load(captions())
+        runCurrent()
+        clock.seekTo(9_000)
+        clock.play()
+        coordinator.start()
+        runCurrent()
+        assertTrue(engine.started)
+
+        coordinator.updateModelPath(null)
+        runCurrent()
+        assertFalse(engine.started)
+        assertEquals(AutoSeekMode.MODEL_REQUIRED, coordinator.capability.mode)
+        assertEquals(9_000L, clock.position.value)
+        assertTrue(clock.playing.value)
+        coordinator.resync()
+        runCurrent()
+        assertFalse(engine.started)
+        coordinator.close()
+    }
+
+    @Test
+    fun removingAndRestoringTheModelRetainsSynchronizedPlaybackUntilExplicitResync() = runTest {
+        val engine = FakeSpeechEngine()
+        val clock = FakeClock()
+        val coordinator = SyncCoordinator(this, engine, QueueMatcher(
+            result(anchor(6, 16_000)), result(anchor(12, 22_000))
+        ), clock) { 15_000_000_000L }
+        coordinator.configureLanguages("hi", "en", "verified-model")
+        coordinator.load(captions())
+        runCurrent()
+        coordinator.start()
+        runCurrent()
+        engine.emitSegment(0, 6, RecognitionTask.TRANSLATE)
+        runCurrent()
+        engine.emitSegment(6, 12, RecognitionTask.TRANSLATE)
+        runCurrent()
+        assertTrue(coordinator.state.value is SyncState.Synchronized)
+        assertEquals(25_000L, clock.position.value)
+
+        coordinator.updateModelPath(null)
+        coordinator.updateModelPath("restored-model")
+        coordinator.start()
+        runCurrent()
+        assertTrue(coordinator.state.value is SyncState.Synchronized)
+        assertFalse(engine.started)
+        assertTrue(clock.playing.value)
+        assertEquals(25_000L, clock.position.value)
+
+        coordinator.resync()
+        runCurrent()
+        assertTrue(engine.started)
+        assertEquals("restored-model", engine.configuration.modelPath)
         coordinator.close()
     }
 

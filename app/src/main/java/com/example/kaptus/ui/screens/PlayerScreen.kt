@@ -162,7 +162,9 @@ fun PlayerScreen(
     var foreground by remember(lifecycleOwner) {
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
     }
-    var entryStartHandled by remember { mutableStateOf(false) }
+    var entryStartHandled by rememberSaveable {
+        mutableStateOf(!player.modelReady || !player.autoSeekAvailable)
+    }
     var startAfterPermission by remember { mutableStateOf(false) }
     var microphoneGranted by remember(microphonePermissionOverride) {
         mutableStateOf(microphonePermissionOverride ?: (
@@ -472,7 +474,7 @@ private fun rememberTouchExplorationEnabled(): Boolean {
 private fun syncExplanation(player: PlayerUiState): String? = if (!player.autoSeekAvailable) {
     null
 } else if (!player.modelReady) {
-    stringResource(R.string.model_unavailable)
+    stringResource(if (player.spokenLanguage == "en") R.string.model_unavailable else R.string.multilingual_model_unavailable)
 } else when (val sync = player.syncState) {
     SyncState.Listening -> stringResource(R.string.sync_hearing_detail)
     is SyncState.Acquiring -> acquisitionExplanation(sync.phase)

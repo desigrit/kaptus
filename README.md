@@ -8,7 +8,7 @@
 
 Kaptus is an Android app for the moments when a movie or TV show does not have usable captions. Choose what you are watching and the language you want to read. Follow the words on a calm, cinema-friendly screen, with simple controls to set the timing.
 
-Kaptus is an early preview made with hard-of-hearing viewers in mind, for Android 13 or newer. Choose captions in any language available for your movie or episode, or open your own Unicode SRT. English audio with English captions supports auto-seek; other combinations currently use manual timing.
+Kaptus is an early preview made with hard-of-hearing viewers in mind, for Android 13 or newer. Choose captions in any language available for your movie or episode, or open your own Unicode SRT. Auto-seek supports English audio with English captions, plus nine other spoken languages with English captions after downloading the optional multilingual model. Other combinations use manual timing.
 
 <p align="center">
   <img src="docs/images/kaptus-player-portrait.png" alt="Kaptus showing synchronized captions for Dune: Part Two in a Pixel 10 Pro-style frame" width="42%" />
@@ -65,7 +65,7 @@ Keep your API key private. Kaptus encrypts it with Android Keystore and keeps it
 
 1. Start the movie or episode and open its prepared captions in Kaptus.
 2. For an available auto-seek combination, grant microphone access and let a clear line of dialogue play. For **Manual timing**, use the timeline and tap Play.
-3. Kaptus listens to overlapping six-second windows, transcribes on your phone, and searches the subtitle text for that phrase.
+3. Kaptus listens to overlapping six-second windows, transcribes or translates on your phone, and searches the caption text for the scene.
 4. When **Synced** appears, the microphone stops and the caption clock continues on its own.
 5. Tap anywhere to reveal playback controls. Use **Resync** whenever you need Kaptus to listen again.
 
@@ -75,15 +75,17 @@ Each synchronization attempt stops after 35 seconds, including model initializat
 
 ### Multilingual auto-seek
 
-Mandarin, Japanese, Spanish, French, German, Korean, Hindi, Telugu and Tamil audio with English captions are the next auto-seek targets. Their recognition paths are implemented for evaluation, but remain disabled until each platform and matching path passes physical-device accuracy and speed tests. Downloading the optional model does not enable an unvalidated language.
+Mandarin, Japanese, Spanish, French, German, Korean, Hindi, Telugu and Tamil audio with English captions can use auto-seek in this preview. Select the language you actually hear, including dubbed audio, and choose English as the caption language.
 
-In Settings, **Multilingual auto-seek model** offers one verified download of approximately 190 MB, shared by all nine targets. It stays on your phone and can be removed. The English model remains bundled. There is no automatic larger-model download.
+In Settings, **Multilingual auto-seek model** offers one verified download of approximately 190 MB, shared by all nine spoken languages. Download it before using multilingual auto-seek or preparing for offline use. It stays on your phone and can be removed. The English model remains bundled. There is no automatic larger-model download.
 
-The planned multilingual path matches a spoken-language helper subtitle file when available, checks its timing against the English display track, and otherwise translates recognized speech into English for matching. A helper file uses an additional OpenSubtitles download only when it is not already saved. See [language support and validation](docs/MULTILINGUAL.md) for the current matrix and test protocol.
+Kaptus matches a spoken-language helper subtitle file when available, checks its timing against the English display track, and otherwise translates captured speech into English for matching. A helper file uses an additional OpenSubtitles download only when it is not already saved. A saved English track without a helper can use direct translation offline once the model is ready.
+
+These multilingual paths are available now, but their speed and accuracy have not been benchmarked on physical phones. Results can vary by language, device, dialogue and subtitle translation; Telugu and Tamil may be especially challenging for the compact model. If a scene cannot be found, try **Resync** during clearer dialogue or use manual timing. See [language support and validation](docs/MULTILINGUAL.md) for the exact combinations and the planned regression benchmarks.
 
 ## Prepare before you go
 
-Choose **Prepare for theater** while you are online. Kaptus shows the maximum provider download allowance needed before continuing and reuses verified saved files. English auto-seek preparation saves up to three ranked tracks and checks the bundled model. Manual combinations save one display track for offline reading without needing a speech model. **Captions saved** and **Offline auto-seek ready** are separate statuses.
+Choose **Prepare for theater** while you are online. Kaptus shows the maximum provider download allowance needed before continuing and reuses verified saved files. Auto-seek preparation can save up to three ranked display tracks and, for multilingual pairs, one spoken-language helper. Offline auto-seek also needs the bundled English model or the downloaded multilingual model. Manual combinations save one display track for offline reading without needing a speech model. **Captions saved** and **Offline auto-seek ready** are separate statuses.
 
 For the best result, choose the exact movie and year or the correct TV episode, place the phone where it can hear the room audio clearly, and start synchronization during spoken dialogue. Alternate cuts can use different timing or dialogue, so Resync or another caption track may be needed.
 
@@ -122,8 +124,9 @@ When Kaptus finds a unique phrase, it uses the audio capture time to compensate 
 ## Current scope
 
 - Provider-supported caption languages and Unicode local SRT files
-- English audio with English captions for currently enabled auto-seek
-- Nine additional spoken-language-to-English targets gated on device validation
+- English audio with English captions, using the bundled speech model
+- Mandarin, Japanese, Spanish, French, German, Korean, Hindi, Telugu and Tamil audio with English captions, using the optional multilingual model
+- Manual timing for all other language combinations
 - User-selected movie or TV show, with season and episode selection
 - Local SRT files or OpenSubtitles caption tracks
 - Android 13 or newer

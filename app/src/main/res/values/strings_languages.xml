@@ -19,12 +19,12 @@
     <string name="captions_saved_manual">Captions saved for offline manual playback.</string>
     <string name="auto_seek_ready">Offline auto-seek ready</string>
     <string name="speech_download_title">Multilingual auto-seek model</string>
-    <string name="speech_download_description">One optional 190 MB download serves all nine target spoken languages. Recognition stays on your phone. Auto-seek will become available as each language passes device testing.</string>
+    <string name="speech_download_description">Download once (190 MB) to find your place in Mandarin Chinese, Japanese, Spanish, French, German, Korean, Hindi, Telugu and Tamil audio with English captions. Recognition stays on your phone.</string>
     <string name="speech_download">Download model</string>
     <string name="speech_download_retry">Retry download</string>
     <string name="speech_download_cancel">Cancel download</string>
     <string name="speech_download_delete">Remove model</string>
-    <string name="speech_download_ready">Downloaded and verified</string>
+    <string name="speech_download_ready">Ready for multilingual auto-seek</string>
     <string name="speech_download_failed">The download did not finish. Check your connection and try again.</string>
     <string name="speech_download_progress">Downloading: %1$d%%</string>
     <plurals name="preparation_quota">
@@ -33,6 +33,9 @@
     </plurals>
     <string name="preparation_helper_cost">Includes up to one spoken-language helper track when available.</string>
     <string name="preparation_manual_cost">These captions use manual timing.</string>
+    <string name="preparation_model_needed">Captions can be saved now. Download the multilingual model in Settings to enable auto-seek.</string>
+    <string name="captions_saved_model_needed">Captions saved. Download the multilingual model in Settings for offline auto-seek.</string>
+    <string name="multilingual_model_unavailable">Download the multilingual model in Settings to enable auto-seek. Manual controls work now.</string>
     <string name="watch_now">Watch now</string>
     <string name="history_language">%1$s · Offline captions</string>
 </resources>

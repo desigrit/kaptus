@@ -68,8 +68,8 @@ android {
         applicationId = "com.example.kaptus"
         minSdk = 33
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.3.0-preview"
+        versionCode = 7
+        versionName = "0.3.1-preview"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

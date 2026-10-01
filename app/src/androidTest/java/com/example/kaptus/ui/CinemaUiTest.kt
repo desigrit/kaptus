@@ -221,6 +221,8 @@ class CinemaUiTest {
         compose.runOnIdle { ready.value = true }
         compose.runOnIdle { assertEquals(0, starts) }
         compose.runOnUiThread { owner.lifecycle.currentState = Lifecycle.State.RESUMED }
+        compose.runOnIdle { assertEquals(0, starts) }
+        compose.onNodeWithText("Start listening").performClick()
         compose.runOnIdle { assertEquals(1, starts) }
     }
 

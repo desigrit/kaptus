@@ -54,7 +54,7 @@ class SyncCoordinator(
     private var helperIndex: CaptionIndex? = null
     private var displayHash = ""
     private var helperHash = ""
-    private var validationRegistry: AutoSeekValidationRegistry = ShippingValidationRegistry
+    private var pathPolicy: AutoSeekPathPolicy = SupportedAutoSeekPaths
     private var mappingCallback: ((ValidatedCaptionMapping) -> Unit)? = null
     private var mapping: ValidatedCaptionMapping? = null
     private var sessionId = 0L
@@ -66,7 +66,7 @@ class SyncCoordinator(
     val capability: AutoSeekCapability
         get() = AutoSeekCapabilities.evaluate(spokenLanguage, captionLanguage,
             modelReady = if (spokenLanguage == "en") engine.isReady else modelPath != null,
-            registry = validationRegistry)
+            pathPolicy = pathPolicy)
 
     fun configureLanguages(
         spokenLanguage: String,
@@ -75,7 +75,7 @@ class SyncCoordinator(
         helperCaptions: List<SubtitleEntry> = emptyList(),
         displayHash: String = "",
         helperHash: String = "",
-        validationRegistry: AutoSeekValidationRegistry = ShippingValidationRegistry,
+        pathPolicy: AutoSeekPathPolicy = SupportedAutoSeekPaths,
         onValidatedMapping: ((ValidatedCaptionMapping) -> Unit)? = null,
         savedMapping: ValidatedCaptionMapping? = null
     ) {
@@ -83,15 +83,32 @@ class SyncCoordinator(
         sessionId++
         this.spokenLanguage = spokenLanguage
         this.captionLanguage = captionLanguage
-        this.modelPath = modelPath
+        this.modelPath = if (spokenLanguage == "en") null else modelPath?.takeIf { it.isNotBlank() }
         this.displayHash = displayHash
         this.helperHash = helperHash
-        this.validationRegistry = validationRegistry
+        this.pathPolicy = pathPolicy
         mappingCallback = onValidatedMapping
         mapping = savedMapping?.takeIf { it.displayHash == displayHash && it.helperHash == helperHash }
         helperIndex = helperCaptions.takeIf { it.isNotEmpty() }?.let(matcher::buildIndex)
         resetTracking()
         stopEngineAsync()
+    }
+
+    /** Refreshes an installed model without opening captions again or starting capture. */
+    fun updateModelPath(modelPath: String?) {
+        if (spokenLanguage == "en") return
+        val nextPath = modelPath?.takeIf { it.isNotBlank() }
+        if (this.modelPath == nextPath) return
+        this.modelPath = nextPath
+        val finding = collectionJob?.isActive == true || restartJob?.isActive == true ||
+            mutableState.value is SyncState.Listening || mutableState.value is SyncState.Acquiring ||
+            mutableState.value is SyncState.Reacquiring
+        if (finding) {
+            haltListening()
+            resetTracking()
+            mutableState.value = SyncState.Idle
+            stopEngineAsync()
+        }
     }
 
     fun load(captions: List<SubtitleEntry>) {
