@@ -21,6 +21,20 @@ Kaptus is an early preview made with hard-of-hearing viewers in mind. It current
 
 <p align="center"><sub>The Dune: Part Two caption shown here is illustrative and is not dialogue from the film.</sub></p>
 
+## Decisions behind Kaptus
+
+**Use AI to find the scene.** I chose a focused task: the viewer selects the title, speech recognition turns a short stretch of dialogue into text, and the app finds it in an existing subtitle file. Kaptus then displays that file's captions. This depends on a suitable subtitle track and cannot supply captions when one is missing.
+
+**Stop listening once the job is done.** I asked for the microphone to turn off as soon as the scene was found. A clock keeps the captions moving; **Resync** starts another listening attempt. This limits listening and processing, but a pause, seek or different cut of the film can require the viewer to resync.
+
+**Keep recent dialogue useful.** An early build stayed on "Transcribing dialogue" for minutes. We changed the work queue so old audio could not pile up, made matching ignore punctuation, and used the time audio was captured to account for processing delay. Short or repeated lines can still be ambiguous. The preview stops a search after 30 seconds of detected dialogue rather than waiting indefinitely. [Matching and timing checks](app/src/test/java/com/example/kaptus/sync)
+
+**How I worked with AI.** Codex helped implement recognition, matching and the player. I tried the builds, reported failures and asked for different layout concepts before refining the experience.
+
+**Where I pushed back.** Rotating the phone restarted listening and interrupted captions. I wanted rotation and returning from another app to preserve playback. I also rejected automatic listening after a manual timeline change: opening captions and pressing **Resync** should be the triggers. For caption downloads, I chose each person's own OpenSubtitles key, accepting extra setup instead of a shared download bill.
+
+**What I would test next.** I would measure time to find the scene, timing error and wrong-scene matches on real phones in noisy rooms. A working preview and passing tests do not establish reliability across films, speakers or languages.
+
 ## Download Kaptus
 
 **[Download the latest Kaptus APK](https://github.com/desigrit/kaptus/releases/latest/download/Kaptus-preview.apk)**
