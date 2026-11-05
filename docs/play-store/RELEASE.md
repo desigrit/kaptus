@@ -35,7 +35,7 @@ For CI or a different machine, supply the existing keystore through `KAPTUS_UPLO
 | Category | Video Players & Editors |
 | Public support email | raunakoberoi@gmail.com |
 
-Confirm free distribution and target age groups with the developer when completing the account forms. Kaptus contains no advertising or in-app purchases. Its microphone permission supports an optional foreground auto-seek feature. It uses the Android document picker instead of broad media permissions.
+The developer confirmed that Kaptus will be free to install. Confirm the intended target age groups when completing the account forms. Kaptus contains no advertising or in-app purchases. Its microphone permission supports an optional foreground auto-seek feature. It uses the Android document picker instead of broad media permissions.
 
 The policy source is `docs/site/privacy.html`. It is published at the root of the `gh-pages` branch using GitHub Pages, and the public HTTPS URL has been verified. The app links to it from Settings. When updating the policy, update both the source and the published branch.
 
