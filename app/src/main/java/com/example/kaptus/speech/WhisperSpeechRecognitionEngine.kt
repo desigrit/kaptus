@@ -11,12 +11,12 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.kaptus.R
 import com.example.kaptus.data.RecognizedSegment
+import com.example.kaptus.data.RecognitionTask
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
@@ -26,11 +26,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.max
+import java.io.File
 
 class WhisperSpeechRecognitionEngine(
     context: Context,
@@ -40,23 +43,25 @@ class WhisperSpeechRecognitionEngine(
     private val scope = CoroutineScope(SupervisorJob() + inferenceDispatcher)
     private val lifecycleMutex = Mutex()
     private val audioWindows = Channel<AudioWindow>(Channel.CONFLATED)
-    private val mutableResults = MutableSharedFlow<RecognizedSegment>(
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
+    private val mutableResults = MutableSharedFlow<RecognizedSegment>()
     override val results: Flow<RecognizedSegment> = mutableResults.asSharedFlow()
     private val mutableActivity = MutableStateFlow(RecognitionActivity.IDLE)
     override val activity: StateFlow<RecognitionActivity> = mutableActivity.asStateFlow()
 
     @Volatile private var cadence = RecognitionCadence.ACQUIRING
-    private var whisperPointer = 0L
+    @Volatile private var whisperPointer = 0L
     private var vadPointer = 0L
     private var captureJob: Job? = null
     private var inferenceJob: Job? = null
+    @Volatile private var configuration = SpeechRecognitionConfiguration()
+    private var loadedModelPath: String? = null
+    private val nativeReferenceLock = Any()
 
     override val isReady: Boolean
         get() = runCatching {
-            applicationContext.assets.open(MODEL_PATH).close()
+            val path = configuration.modelPath
+            if (path == null) applicationContext.assets.open(MODEL_PATH).close()
+            else check(File(path).isFile)
             true
         }.getOrDefault(false)
 
@@ -64,8 +69,19 @@ class WhisperSpeechRecognitionEngine(
         this.cadence = cadence
     }
 
+    override suspend fun configure(configuration: SpeechRecognitionConfiguration) {
+        stop()
+        lifecycleMutex.withLock {
+            require(configuration.sourceLanguage in setOf("en", "zh", "ja", "es", "fr", "de", "ko", "hi", "te", "ta"))
+            require(configuration.sourceLanguage == "en" || configuration.modelPath != null)
+            this.configuration = configuration
+        }
+    }
+
     override suspend fun prepare() = lifecycleMutex.withLock {
         ensureNativeContexts()
+        currentCoroutineContext().ensureActive()
+        synchronized(nativeReferenceLock) { WhisperNative.resetAbort(whisperPointer) }
     }
 
     override suspend fun start() = lifecycleMutex.withLock {
@@ -74,41 +90,62 @@ class WhisperSpeechRecognitionEngine(
             applicationContext.getString(R.string.error_microphone_required)
         }
         ensureNativeContexts()
+        currentCoroutineContext().ensureActive()
+        synchronized(nativeReferenceLock) { WhisperNative.resetAbort(whisperPointer) }
         while (audioWindows.tryReceive().isSuccess) Unit
         mutableActivity.value = RecognitionActivity.LISTENING
         inferenceJob = scope.launch { runInferenceLoop() }
         captureJob = scope.launch(Dispatchers.IO) { runCaptureLoop() }
     }
 
-    override suspend fun stop() = lifecycleMutex.withLock {
-        captureJob?.cancelAndJoin()
-        inferenceJob?.cancelAndJoin()
-        captureJob = null
-        inferenceJob = null
-        while (audioWindows.tryReceive().isSuccess) Unit
-        mutableActivity.value = RecognitionActivity.IDLE
+    override suspend fun stop() {
+        // Native inference is blocking, so cancellation must reach its abort callback
+        // before waiting for the serial worker or lifecycle mutex.
+        synchronized(nativeReferenceLock) { if (whisperPointer != 0L) WhisperNative.abort(whisperPointer) }
+        captureJob?.cancel()
+        inferenceJob?.cancel()
+        lifecycleMutex.withLock {
+            captureJob?.cancelAndJoin()
+            inferenceJob?.cancelAndJoin()
+            captureJob = null
+            inferenceJob = null
+            while (audioWindows.tryReceive().isSuccess) Unit
+            mutableActivity.value = RecognitionActivity.IDLE
+        }
     }
 
-    override suspend fun close() = lifecycleMutex.withLock {
-        captureJob?.cancelAndJoin()
-        inferenceJob?.cancelAndJoin()
-        captureJob = null
-        inferenceJob = null
-        mutableActivity.value = RecognitionActivity.IDLE
-        withContext(inferenceDispatcher) {
-            if (whisperPointer != 0L) WhisperNative.freeWhisper(whisperPointer)
-            if (vadPointer != 0L) WhisperNative.freeVad(vadPointer)
-            whisperPointer = 0L
-            vadPointer = 0L
+    override suspend fun close() {
+        stop()
+        lifecycleMutex.withLock {
+            mutableActivity.value = RecognitionActivity.IDLE
+            withContext(inferenceDispatcher) {
+                synchronized(nativeReferenceLock) {
+                    if (whisperPointer != 0L) WhisperNative.freeWhisper(whisperPointer)
+                    whisperPointer = 0L
+                }
+                if (vadPointer != 0L) WhisperNative.freeVad(vadPointer)
+                vadPointer = 0L
+                loadedModelPath = null
+            }
         }
     }
 
     private suspend fun ensureNativeContexts() = withContext(inferenceDispatcher) {
+        val selectedPath = configuration.modelPath ?: MODEL_PATH
+        if (whisperPointer != 0L && loadedModelPath != selectedPath) {
+            synchronized(nativeReferenceLock) {
+                WhisperNative.freeWhisper(whisperPointer)
+                whisperPointer = 0L
+            }
+        }
         if (whisperPointer == 0L) {
-            whisperPointer = WhisperNative.initWhisper(applicationContext.assets, MODEL_PATH)
+            val pointer = if (configuration.modelPath == null) WhisperNative.initWhisper(applicationContext.assets, MODEL_PATH)
+                else WhisperNative.initWhisperFile(selectedPath)
+            synchronized(nativeReferenceLock) { whisperPointer = pointer }
             check(whisperPointer != 0L) {
                 applicationContext.getString(R.string.error_whisper_model_load)
             }
+            loadedModelPath = selectedPath
         }
         if (vadPointer == 0L) {
             vadPointer = WhisperNative.initVad(applicationContext.assets, VAD_PATH)
@@ -197,6 +234,11 @@ class WhisperSpeechRecognitionEngine(
             try {
                 val segment = transcribe(window)
                 mutableResults.emit(segment)
+                currentCoroutineContext().ensureActive()
+                val config = configuration
+                if (segment.speechDetected && config.includeTranslation && config.task == RecognitionTask.TRANSCRIBE) {
+                    mutableResults.emit(transcribe(window, RecognitionTask.TRANSLATE))
+                }
             } finally {
                 if (captureJob?.isActive == true) {
                     mutableActivity.value = RecognitionActivity.LISTENING
@@ -205,19 +247,22 @@ class WhisperSpeechRecognitionEngine(
         }
     }
 
-    private fun transcribe(window: AudioWindow): RecognizedSegment {
+    private fun transcribe(window: AudioWindow, task: RecognitionTask = configuration.task): RecognizedSegment {
+        val config = configuration
         if (!WhisperNative.hasSpeech(vadPointer, window.samples)) {
             return RecognizedSegment(
                 emptyList(),
                 window.startNanos,
                 window.endNanos,
-                speechDetected = false
+                speechDetected = false,
+                sessionId = config.sessionId, sourceLanguage = config.sourceLanguage, task = task
             )
         }
         mutableActivity.value = RecognitionActivity.TRANSCRIBING
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
         val startedAtNanos = System.nanoTime()
-        val result = WhisperNative.transcribe(whisperPointer, window.samples, threads)
+        val result = WhisperNative.transcribe(whisperPointer, window.samples, threads, config.sourceLanguage,
+            task == RecognitionTask.TRANSLATE)
         val durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000L
         Log.i(LOG_TAG, "Whisper decoded ${WINDOW_MS}ms of audio in ${durationMs}ms")
         if (result != 0) {
@@ -225,21 +270,25 @@ class WhisperSpeechRecognitionEngine(
                 emptyList(),
                 window.startNanos,
                 window.endNanos,
-                speechDetected = true
+                speechDetected = true,
+                sessionId = config.sessionId, sourceLanguage = config.sourceLanguage, task = task
             )
         }
         val words = buildList {
             for (segmentIndex in 0 until WhisperNative.segmentCount(whisperPointer)) {
                 val tokens = buildList {
                     for (tokenIndex in 0 until WhisperNative.tokenCount(whisperPointer, segmentIndex)) {
-                        val text = WhisperNative.tokenText(whisperPointer, segmentIndex, tokenIndex)
-                        val startCs = WhisperNative.tokenStart(whisperPointer, segmentIndex, tokenIndex)
-                        val endCs = WhisperNative.tokenEnd(whisperPointer, segmentIndex, tokenIndex)
+                        val bytes = WhisperNative.tokenBytes(whisperPointer, segmentIndex, tokenIndex)
+                        val translated = task == RecognitionTask.TRANSLATE
+                        val startCs = if (translated) WhisperNative.segmentStart(whisperPointer, segmentIndex)
+                            else WhisperNative.tokenStart(whisperPointer, segmentIndex, tokenIndex)
+                        val endCs = if (translated) WhisperNative.segmentEnd(whisperPointer, segmentIndex)
+                            else WhisperNative.tokenEnd(whisperPointer, segmentIndex, tokenIndex)
                         add(
-                            DecodedSpeechToken(
-                                text = text,
-                                startCentiseconds = startCs,
-                                endCentiseconds = endCs,
+                            DecodedSpeechBytes(
+                                bytes = bytes,
+                                startCentiseconds = startCs.coerceIn(0L, WINDOW_MS / 10L),
+                                endCentiseconds = endCs.coerceIn(0L, WINDOW_MS / 10L),
                                 probability = WhisperNative.tokenProbability(
                                     whisperPointer,
                                     segmentIndex,
@@ -249,14 +298,16 @@ class WhisperSpeechRecognitionEngine(
                         )
                     }
                 }
-                addAll(RecognizedWordAssembler.assemble(tokens, window.startNanos))
+                addAll(RecognizedWordAssembler.assembleBytes(tokens, window.startNanos, config.sourceLanguage,
+                    translated = task == RecognitionTask.TRANSLATE))
             }
         }
         return RecognizedSegment(
             words,
             window.startNanos,
             window.endNanos,
-            speechDetected = true
+            speechDetected = true,
+            sessionId = config.sessionId, sourceLanguage = config.sourceLanguage, task = task
         )
     }
 

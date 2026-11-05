@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="languages_title">Languages</string>
+    <string name="caption_language">Caption language</string>
+    <string name="spoken_language">Spoken language</string>
+    <string name="language_unknown">Not sure</string>
+    <string name="language_mandarin">Mandarin Chinese</string>
+    <string name="language_cantonese">Cantonese</string>
+    <string name="language_search">Search languages</string>
+    <string name="language_empty">No languages match your search.</string>
+    <string name="language_preferences_description">Choose what you read and what you hear. You can change these for each movie or episode.</string>
+    <string name="manual_timing">Manual timing</string>
+    <string name="manual_pair_description">Use play, pause and the timeline to find your place. Auto-seek is not available for this language combination yet.</string>
+    <string name="automatic_pair_description">Kaptus listens briefly to find your place, then stops the microphone.</string>
+    <string name="import_language_title">Choose your caption language</string>
+    <string name="import_language_description">An SRT file does not tell us its language. Choose the language in the file, or use manual timing if you are not sure.</string>
+    <string name="open_captions">Open captions</string>
+    <string name="language_no_captions">No complete captions in %1$s were found. Choose another language or open an SRT file.</string>
+    <string name="captions_saved_manual">Captions saved for offline manual playback.</string>
+    <string name="auto_seek_ready">Offline auto-seek ready</string>
+    <string name="speech_download_title">Multilingual auto-seek model</string>
+    <string name="speech_download_description">Download once (190 MB) to find your place in Mandarin Chinese, Japanese, Spanish, French, German, Korean, Hindi, Telugu and Tamil audio with English captions. Recognition stays on your phone.</string>
+    <string name="speech_download">Download model</string>
+    <string name="speech_download_retry">Retry download</string>
+    <string name="speech_download_cancel">Cancel download</string>
+    <string name="speech_download_delete">Remove model</string>
+    <string name="speech_download_ready">Ready for multilingual auto-seek</string>
+    <string name="speech_download_failed">The download did not finish. Check your connection and try again.</string>
+    <string name="speech_download_progress">Downloading: %1$d%%</string>
+    <plurals name="preparation_quota">
+        <item quantity="one">Up to %1$d new subtitle download from your OpenSubtitles allowance. Saved files are reused.</item>
+        <item quantity="other">Up to %1$d new subtitle downloads from your OpenSubtitles allowance. Saved files are reused.</item>
+    </plurals>
+    <string name="preparation_helper_cost">Includes up to one spoken-language helper track when available.</string>
+    <string name="preparation_manual_cost">These captions use manual timing.</string>
+    <string name="preparation_model_needed">Captions can be saved now. Download the multilingual model in Settings to enable auto-seek.</string>
+    <string name="captions_saved_model_needed">Captions saved. Download the multilingual model in Settings for offline auto-seek.</string>
+    <string name="multilingual_model_unavailable">Download the multilingual model in Settings to enable auto-seek. Manual controls work now.</string>
+    <string name="watch_now">Watch now</string>
+    <string name="history_language">%1$s · Offline captions</string>
+</resources>

@@ -68,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kaptus.R
 import com.example.kaptus.data.settings.AppSettings
+import com.example.kaptus.data.CaptionLanguage
+import com.example.kaptus.speech.SpeechModelStatus
 import com.example.kaptus.data.settings.ProviderCredentials
 import com.example.kaptus.ui.theme.KaptusTheme
 import kotlin.math.roundToInt
@@ -83,7 +85,13 @@ fun SettingsScreen(
     onTestConnection: () -> Unit,
     onCaptionSizeChange: (Float) -> Unit,
     onBrightnessChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    languages: List<CaptionLanguage> = emptyList(),
+    onLanguagesChange: (String, String) -> Unit = { _, _ -> },
+    modelStatus: SpeechModelStatus = SpeechModelStatus.NotDownloaded,
+    onDownloadModel: () -> Unit = {},
+    onCancelModel: () -> Unit = {},
+    onDeleteModel: () -> Unit = {}
 ) {
     // Secrets intentionally stay out of saved instance state.
     var apiKey by remember(credentials.apiKey) { mutableStateOf(credentials.apiKey) }
@@ -362,6 +370,18 @@ fun SettingsScreen(
                 if (providerFirst) providerItems() else appearanceItems()
                 item(key = "section_divider") {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+                if (languages.isNotEmpty()) item(key = "languages") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsSectionHeading(stringResource(R.string.languages_title),
+                            stringResource(R.string.language_preferences_description))
+                        LanguageSelection(languages, settings.captionLanguage, settings.spokenLanguage,
+                            { onLanguagesChange(it, settings.spokenLanguage) },
+                            { onLanguagesChange(settings.captionLanguage, it) })
+                    }
+                }
+                item(key = "speech_model") {
+                    SpeechModelSection(modelStatus, onDownloadModel, onCancelModel, onDeleteModel)
                 }
                 if (providerFirst) appearanceItems() else providerItems()
             }

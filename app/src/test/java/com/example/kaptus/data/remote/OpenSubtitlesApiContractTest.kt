@@ -96,6 +96,36 @@ class OpenSubtitlesApiContractTest {
     }
 
     @Test
+    fun readsLanguageCatalogWithoutCollapsingVariants() = runTest {
+        server.enqueue(jsonResponse("""{"data":[{"language_code":"pt-br","language_name":"Portuguese (Brazil)"},{"language_code":"zh-tw","language_name":"Chinese (traditional)"}]}"""))
+        val languages = api.languages()
+        assertEquals(listOf("pt-br", "zh-tw"), languages.data.map { it.code })
+        assertEquals("/api/v1/infos/languages", server.takeRequest().path)
+    }
+
+    @Test
+    fun passesSelectedCaptionLanguageOnEpisodeSearch() = runTest {
+        server.enqueue(jsonResponse("""{"data":[]}"""))
+        api.searchSubtitles(parentFeatureId = 123, seasonNumber = 3, episodeNumber = 9, type = "episode", languages = "ta")
+        val path = server.takeRequest().requestUrl!!
+        assertEquals("ta", path.queryParameter("languages"))
+        assertEquals("3", path.queryParameter("season_number"))
+        assertEquals("9", path.queryParameter("episode_number"))
+    }
+
+    @Test
+    fun excludesSplitCdUploadsFromCompleteFileCandidates() = runTest {
+        server.enqueue(jsonResponse("""{"data":[
+          {"id":"full","attributes":{"language":"es","files":[{"file_id":10,"file_name":"full.srt"}]}},
+          {"id":"split","attributes":{"language":"es","files":[{"file_id":20,"file_name":"CD1.srt"},{"file_id":21,"file_name":"CD2.srt"}]}},
+          {"id":"missing","attributes":{"language":"es","files":[]}}
+        ]}"""))
+        val response = api.searchSubtitles(languages = "es")
+        assertEquals(listOf(10L), response.data.mapNotNull { it.completeFile()?.fileId })
+        assertEquals("es", server.takeRequest().requestUrl!!.queryParameter("languages"))
+    }
+
+    @Test
     fun surfacesAuthenticationAndQuotaHttpFailures() = runTest {
         server.enqueue(jsonResponse("""{"message":"unauthorized"}""", 401))
         server.enqueue(jsonResponse("""{"message":"quota exhausted"}""", 429))

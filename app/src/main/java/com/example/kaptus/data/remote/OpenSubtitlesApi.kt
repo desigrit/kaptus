@@ -9,6 +9,9 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface OpenSubtitlesApi {
+    @GET("api/v1/infos/languages")
+    suspend fun languages(): LanguageResponse
+
     @GET("api/v1/features")
     suspend fun searchFeatures(
         @Query("query") query: String,
@@ -37,6 +40,15 @@ interface OpenSubtitlesApi {
 }
 
 @Serializable
+data class LanguageResponse(val data: List<LanguageDto> = emptyList())
+
+@Serializable
+data class LanguageDto(
+    @SerialName("language_code") val code: String = "",
+    @SerialName("language_name") val name: String = ""
+)
+
+@Serializable
 data class FeatureResponse(val data: List<FeatureDto> = emptyList())
 
 @Serializable
@@ -62,7 +74,10 @@ data class SubtitleResponse(val data: List<SubtitleDto> = emptyList())
 data class SubtitleDto(
     val id: JsonElement,
     val attributes: SubtitleAttributesDto = SubtitleAttributesDto()
-)
+) {
+    // Multi-file uploads often contain separate CDs. Assembly is not supported yet.
+    fun completeFile(): SubtitleFileDto? = attributes.files.singleOrNull()
+}
 
 @Serializable
 data class SubtitleAttributesDto(

@@ -78,8 +78,8 @@
     <string name="preparation_caption_progress">Preparing caption %1$d of %2$d…</string>
     <string name="preparation_downloading_best">Downloading the best caption track…</string>
     <string name="error_caption_downloads_failed">The caption tracks were found but could not be downloaded.</string>
-    <string name="preparation_checking_model">Checking the bundled speech model…</string>
-    <string name="error_model_prepare_failed">The bundled speech model could not be prepared on this device.</string>
+    <string name="preparation_checking_model">Checking the speech model…</string>
+    <string name="error_model_prepare_failed">The speech model could not be prepared on this device. Try opening your captions again.</string>
     <plurals name="prepared_for_theater_notice">
         <item quantity="one">Prepared for theater: %1$d caption track available offline.</item>
         <item quantity="other">Prepared for theater: %1$d caption tracks available offline.</item>

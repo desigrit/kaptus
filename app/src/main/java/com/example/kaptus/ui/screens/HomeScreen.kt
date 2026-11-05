@@ -64,8 +64,12 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenPreparedMovie: (String) -> Unit,
     modifier: Modifier = Modifier,
-    visualStyle: KaptusVisualStyle = KaptusVisualStyle.CinemaAmber
+    visualStyle: KaptusVisualStyle = KaptusVisualStyle.CinemaAmber,
+    onOpenPreparedCaptions: ((PreparedMovie) -> Unit)? = null
 ) {
+    val openPrepared: (PreparedMovie) -> Unit = { movie ->
+        onOpenPreparedCaptions?.invoke(movie) ?: onOpenPreparedMovie(movie.featureId)
+    }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -120,7 +124,7 @@ fun HomeScreen(
                         item { ImportButton(onOpenSrt) }
                         if (!providerConfigured) item { ProviderSetupRow(onOpenSettings) }
                         item { LibraryHeading(R.string.prepared_movies) }
-                        preparedItems(preparedMovies, onOpenPreparedMovie)
+                        preparedItems(preparedMovies, openPrepared)
                     }
                     KaptusVisualStyle.MaterialSage -> {
                         item { HomeIntroduction(R.string.discovery_sage_title, R.string.discovery_sage_description) }
@@ -156,7 +160,7 @@ fun HomeScreen(
                             Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                                 Column {
                                     preparedMovies.forEachIndexed { index, movie ->
-                                        PreparedMovieRow(movie, { onOpenPreparedMovie(movie.featureId) }, grouped = true)
+                                        PreparedMovieRow(movie, { openPrepared(movie) }, grouped = true)
                                         if (index < preparedMovies.lastIndex) HorizontalDivider(
                                             modifier = Modifier.padding(start = 56.dp, end = 20.dp),
                                             color = MaterialTheme.colorScheme.outlineVariant
@@ -171,8 +175,8 @@ fun HomeScreen(
                         item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 8.dp)) }
                         item { LibraryHeading(R.string.discovery_paper_library, generousSpacing = false) }
                         if (preparedMovies.isEmpty()) item { EmptyPreparedLibrary() }
-                        else items(preparedMovies, key = { it.featureId }) { movie ->
-                            PreparedMovieRow(movie, { onOpenPreparedMovie(movie.featureId) }, editorial = true)
+                        else items(preparedMovies, key = { "${it.featureId}:${it.captionLanguage}" }) { movie ->
+                            PreparedMovieRow(movie, { openPrepared(movie) }, editorial = true)
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
                         if (!providerConfigured) item { ProviderSetupRow(onOpenSettings) }
@@ -191,9 +195,9 @@ fun HomeScreen(
                         else {
                             item {
                                 val movie = preparedMovies.first()
-                                FeaturedMovie(movie, onClick = { onOpenPreparedMovie(movie.featureId) })
+                                FeaturedMovie(movie, onClick = { openPrepared(movie) })
                             }
-                            preparedItems(preparedMovies.drop(1), onOpenPreparedMovie, showEmpty = false)
+                            preparedItems(preparedMovies.drop(1), openPrepared, showEmpty = false)
                         }
                     }
                 }
@@ -266,9 +270,9 @@ private fun LibraryHeading(title: Int, generousSpacing: Boolean = true) {
     )
 }
 
-private fun LazyListScope.preparedItems(movies: List<PreparedMovie>, onOpen: (String) -> Unit, showEmpty: Boolean = true) {
+private fun LazyListScope.preparedItems(movies: List<PreparedMovie>, onOpen: (PreparedMovie) -> Unit, showEmpty: Boolean = true) {
     if (movies.isEmpty() && showEmpty) item { EmptyPreparedLibrary() }
-    else items(movies, key = { it.featureId }) { movie -> PreparedMovieRow(movie, onClick = { onOpen(movie.featureId) }) }
+    else items(movies, key = { "${it.featureId}:${it.captionLanguage}" }) { movie -> PreparedMovieRow(movie, onClick = { onOpen(movie) }) }
 }
 
 @Composable
@@ -298,7 +302,7 @@ private fun PreparedMovieRow(movie: PreparedMovie, onClick: () -> Unit, grouped:
                     style = if (editorial) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    pluralStringResource(R.plurals.offline_tracks, movie.trackCount, movie.trackCount),
+                    stringResource(R.string.history_language, captionLanguageName(movie.captionLanguage, emptyList())),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -331,7 +335,7 @@ private fun FeaturedMovie(movie: PreparedMovie, onClick: () -> Unit) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(movie.title, style = MaterialTheme.typography.headlineSmall)
                 movie.year?.let { Text(it.toString(), style = MaterialTheme.typography.titleSmall) }
-                Text(pluralStringResource(R.plurals.offline_tracks, movie.trackCount, movie.trackCount), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.history_language, captionLanguageName(movie.captionLanguage, emptyList())), style = MaterialTheme.typography.bodyMedium)
             }
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
         }

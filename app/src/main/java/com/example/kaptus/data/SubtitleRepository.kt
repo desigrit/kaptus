@@ -4,9 +4,14 @@ import kotlinx.coroutines.flow.Flow
 
 interface SubtitleRepository {
     suspend fun searchMovies(query: String): Result<List<MovieCandidate>>
-    suspend fun findTracks(movie: MovieCandidate): Result<List<CaptionTrack>>
+    suspend fun getLanguages(): Result<List<CaptionLanguage>>
+    suspend fun findTracks(movie: MovieCandidate, language: String = "en"): Result<List<CaptionTrack>>
     suspend fun download(track: CaptionTrack): Result<LocalCaptionTrack>
-    suspend fun loadPrepared(featureId: String): Result<List<LocalCaptionTrack>>
+    suspend fun loadPrepared(
+        featureId: String,
+        language: String = "en",
+        role: CaptionTrackRole = CaptionTrackRole.DISPLAY
+    ): Result<List<LocalCaptionTrack>>
     fun observePreparedMovies(): Flow<List<PreparedMovie>>
     fun resetSession()
 }

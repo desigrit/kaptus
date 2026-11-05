@@ -11,7 +11,8 @@ data class MovieCandidate(
     val parentImdbId: Long? = null,
     val parentTmdbId: Long? = null,
     val seasonNumber: Int? = null,
-    val episodeNumber: Int? = null
+    val episodeNumber: Int? = null,
+    val spokenLanguage: String = "en"
 ) {
     fun episode(season: Int, episode: Int): MovieCandidate = copy(
         id = "$id-s${season}e$episode",
@@ -26,6 +27,12 @@ data class MovieCandidate(
         episodeNumber = episode
     )
 }
+
+data class CaptionLanguage(val code: String, val name: String)
+
+enum class CaptionTrackRole { DISPLAY, MATCHING_HELPER }
+
+enum class RecognitionTask { TRANSCRIBE, TRANSLATE }
 
 enum class MediaType {
     Movie,
@@ -46,14 +53,16 @@ data class CaptionTrack(
     val machineTranslated: Boolean,
     val ratings: Float,
     val downloadCount: Long,
-    val release: String
+    val release: String,
+    val role: CaptionTrackRole = CaptionTrackRole.DISPLAY
 )
 
 data class LocalCaptionTrack(
     val track: CaptionTrack,
     val movie: MovieCandidate,
     val localPath: String,
-    val entries: List<SubtitleEntry>
+    val entries: List<SubtitleEntry>,
+    val contentHash: String = ""
 )
 
 data class PreparedMovie(
@@ -61,7 +70,12 @@ data class PreparedMovie(
     val title: String,
     val year: Int?,
     val trackCount: Int,
-    val preparedAtEpochMs: Long
+    val preparedAtEpochMs: Long,
+    val captionLanguage: String = "en",
+    val mediaType: MediaType = MediaType.Movie,
+    val seasonNumber: Int? = null,
+    val episodeNumber: Int? = null,
+    val spokenLanguage: String = "en"
 )
 
 data class RecognizedWord(
@@ -75,7 +89,10 @@ data class RecognizedSegment(
     val words: List<RecognizedWord>,
     val capturedStartNanos: Long,
     val capturedEndNanos: Long,
-    val speechDetected: Boolean = words.isNotEmpty()
+    val speechDetected: Boolean = words.isNotEmpty(),
+    val sessionId: Long = 0L,
+    val sourceLanguage: String = "en",
+    val task: RecognitionTask = RecognitionTask.TRANSCRIBE
 ) {
     val text: String = words.joinToString(" ") { it.text }
 }

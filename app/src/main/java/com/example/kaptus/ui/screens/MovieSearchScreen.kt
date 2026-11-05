@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import com.example.kaptus.R
 import com.example.kaptus.data.MovieCandidate
 import com.example.kaptus.data.MediaType
+import com.example.kaptus.data.CaptionLanguage
 import com.example.kaptus.ui.theme.KaptusTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,7 +92,13 @@ fun MovieSearchScreen(
     onQueryChange: (String) -> Unit,
     onSelectMovie: (MovieCandidate) -> Unit,
     onPrepareForTheater: (MovieCandidate) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    languages: List<CaptionLanguage> = emptyList(),
+    captionLanguage: String = "en",
+    spokenLanguage: String = "en",
+    onCaptionLanguageChange: (String) -> Unit = {},
+    onSpokenLanguageChange: (String) -> Unit = {},
+    languageSelectionEnabled: Boolean = true
 ) {
     var selectedMovieId by rememberSaveable(query) { mutableStateOf<String?>(null) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -147,6 +154,17 @@ fun MovieSearchScreen(
                     contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    if (languages.isNotEmpty()) item(key = "language_selection") {
+                        LanguageSelection(languages, captionLanguage, spokenLanguage,
+                            onCaptionLanguageChange, onSpokenLanguageChange,
+                            enabled = languageSelectionEnabled)
+                        Text(stringResource(if (captionLanguage == "en" && spokenLanguage == "en")
+                            R.string.automatic_pair_description else R.string.manual_pair_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        HorizontalDivider()
+                    }
                     if (!providerConfigured) {
                         item { ProviderSetupRow(onOpenSettings) }
                         item { SearchGuidance(Icons.Outlined.Movie, stringResource(R.string.discovery_search_setup_title), stringResource(R.string.discovery_search_setup_description)) }

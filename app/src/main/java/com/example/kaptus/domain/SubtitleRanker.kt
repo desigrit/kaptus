@@ -6,10 +6,11 @@ import com.example.kaptus.data.MovieCandidate
 object SubtitleRanker {
     fun rank(
         tracks: List<CaptionTrack>,
-        movie: MovieCandidate? = null
+        movie: MovieCandidate? = null,
+        language: String = "en"
     ): List<CaptionTrack> = tracks
         .asSequence()
-        .filter { it.language.equals("en", ignoreCase = true) }
+        .filter { it.language.equals(language, ignoreCase = true) }
         .filterNot { it.foreignPartsOnly }
         .sortedWith(
             compareByDescending<CaptionTrack> { score(it, movie) }
@@ -31,7 +32,7 @@ object SubtitleRanker {
         movie ?: return 0.0
         val release = "${track.release} ${track.fileName}".lowercase()
         val titleWords = movie.title.lowercase()
-            .split(Regex("[^a-z0-9]+"))
+            .split(Regex("[^\\p{L}\\p{M}\\p{N}]+"))
             .filter { it.length > 2 }
         val titleMatches = titleWords.count(release::contains)
         val titleScore = if (titleWords.isEmpty()) 0.0 else 12.0 * titleMatches / titleWords.size

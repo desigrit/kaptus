@@ -9,6 +9,7 @@ import com.example.kaptus.data.local.KaptusDatabase
 import com.example.kaptus.data.remote.OpenSubtitlesService
 import com.example.kaptus.data.settings.SecureCredentialStore
 import com.example.kaptus.data.settings.SettingsRepository
+import com.example.kaptus.speech.SpeechModelManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,11 +29,12 @@ class AppContainer(context: Context) {
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val credentials = SecureCredentialStore(applicationContext)
     val settings = SettingsRepository(applicationContext)
+    val speechModels = SpeechModelManager(applicationContext)
     private val database = Room.databaseBuilder(
         applicationContext,
         KaptusDatabase::class.java,
         "kaptus.db"
-    ).build()
+    ).addMigrations(KaptusDatabase.MIGRATION_1_2).build()
     val subtitles: SubtitleRepository = OpenSubtitlesRepository(
         context = applicationContext,
         service = OpenSubtitlesService.create(credentials),

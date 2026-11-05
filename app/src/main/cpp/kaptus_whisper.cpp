@@ -4,9 +4,62 @@
 #include <whisper.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstring>
+#include <vector>
 #include <string>
 
 namespace {
+
+struct RecognizerContext {
+    whisper_context *context;
+    std::atomic<bool> aborted{false};
+};
+
+whisper_context *whisperContext(jlong pointer) {
+    return pointer == 0 ? nullptr : reinterpret_cast<RecognizerContext *>(pointer)->context;
+}
+
+bool abortRequested(void *context) {
+    return static_cast<RecognizerContext *>(context)->aborted.load();
+}
+
+// JNI NewStringUTF expects modified UTF-8. Whisper emits ordinary UTF-8, including
+// byte-split tokens, so expose token bytes and decode complete sequences in Kotlin.
+jbyteArray bytes(JNIEnv *environment, const char *text) {
+    const auto count = static_cast<jsize>(text == nullptr ? 0 : std::strlen(text));
+    jbyteArray result = environment->NewByteArray(count);
+    if (count > 0) environment->SetByteArrayRegion(result, 0, count, reinterpret_cast<const jbyte *>(text));
+    return result;
+}
+
+jstring unicodeString(JNIEnv *environment, const char *text) {
+    std::vector<jchar> output;
+    const auto *input = reinterpret_cast<const unsigned char *>(text == nullptr ? "" : text);
+    const size_t count = std::strlen(reinterpret_cast<const char *>(input));
+    for (size_t index = 0; index < count;) {
+        uint32_t point = input[index++];
+        int extra = 0;
+        if (point >= 0xc2 && point <= 0xdf) { point &= 0x1f; extra = 1; }
+        else if (point >= 0xe0 && point <= 0xef) { point &= 0x0f; extra = 2; }
+        else if (point >= 0xf0 && point <= 0xf4) { point &= 0x07; extra = 3; }
+        else if (point >= 0x80) { output.push_back(0xfffd); continue; }
+        bool valid = index + extra <= count;
+        for (int offset = 0; valid && offset < extra; ++offset) {
+            const unsigned char next = input[index + offset];
+            valid = (next & 0xc0) == 0x80;
+            point = (point << 6) | (next & 0x3f);
+        }
+        if (!valid || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff) ||
+            (extra == 1 && point < 0x80) || (extra == 2 && point < 0x800) || (extra == 3 && point < 0x10000)) {
+            output.push_back(0xfffd); continue;
+        }
+        index += extra;
+        if (point <= 0xffff) output.push_back(static_cast<jchar>(point));
+        else { point -= 0x10000; output.push_back(0xd800 + (point >> 10)); output.push_back(0xdc00 + (point & 0x3ff)); }
+    }
+    return environment->NewString(output.data(), static_cast<jsize>(output.size()));
+}
 
 struct AssetContext {
     AAsset *asset;
@@ -67,9 +120,16 @@ Java_com_example_kaptus_speech_WhisperNative_initWhisper(
     jobject assetManager,
     jstring path
 ) {
-    return reinterpret_cast<jlong>(
-        loadAsset<whisper_context>(environment, assetManager, path, false)
-    );
+    auto *context = loadAsset<whisper_context>(environment, assetManager, path, false);
+    return context == nullptr ? 0 : reinterpret_cast<jlong>(new RecognizerContext{context});
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_example_kaptus_speech_WhisperNative_initWhisperFile(JNIEnv *environment, jobject, jstring path) {
+    const char *chars = environment->GetStringUTFChars(path, nullptr);
+    auto *context = whisper_init_from_file_with_params(chars, whisper_context_default_params());
+    environment->ReleaseStringUTFChars(path, chars);
+    return context == nullptr ? 0 : reinterpret_cast<jlong>(new RecognizerContext{context});
 }
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -86,7 +146,21 @@ Java_com_example_kaptus_speech_WhisperNative_initVad(
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_kaptus_speech_WhisperNative_freeWhisper(JNIEnv *, jobject, jlong pointer) {
-    if (pointer != 0) whisper_free(reinterpret_cast<whisper_context *>(pointer));
+    if (pointer != 0) {
+        auto *context = reinterpret_cast<RecognizerContext *>(pointer);
+        whisper_free(context->context);
+        delete context;
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_kaptus_speech_WhisperNative_resetAbort(JNIEnv *, jobject, jlong pointer) {
+    if (pointer != 0) reinterpret_cast<RecognizerContext *>(pointer)->aborted.store(false);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_kaptus_speech_WhisperNative_abort(JNIEnv *, jobject, jlong pointer) {
+    if (pointer != 0) reinterpret_cast<RecognizerContext *>(pointer)->aborted.store(true);
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -122,20 +196,26 @@ Java_com_example_kaptus_speech_WhisperNative_transcribe(
     jobject,
     jlong pointer,
     jfloatArray audio,
-    jint threads
+    jint threads,
+    jstring language,
+    jboolean translate
 ) {
     if (pointer == 0) return -1;
-    auto *context = reinterpret_cast<whisper_context *>(pointer);
+    auto *recognizer = reinterpret_cast<RecognizerContext *>(pointer);
+    auto *context = recognizer->context;
     const jsize count = environment->GetArrayLength(audio);
     jfloat *samples = environment->GetFloatArrayElements(audio, nullptr);
 
     whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-    params.language = "en";
+    const char *languageChars = environment->GetStringUTFChars(language, nullptr);
+    params.language = languageChars;
     params.n_threads = std::max(1, static_cast<int>(threads));
-    params.translate = false;
+    params.translate = translate == JNI_TRUE;
     params.no_context = true;
     params.single_segment = false;
-    params.token_timestamps = true;
+    params.token_timestamps = translate != JNI_TRUE;
+    params.abort_callback = abortRequested;
+    params.abort_callback_user_data = recognizer;
     params.max_len = 0;
     params.print_realtime = false;
     params.print_progress = false;
@@ -145,6 +225,7 @@ Java_com_example_kaptus_speech_WhisperNative_transcribe(
     params.suppress_nst = true;
 
     const int result = whisper_full(context, params, samples, count);
+    environment->ReleaseStringUTFChars(language, languageChars);
     environment->ReleaseFloatArrayElements(audio, samples, JNI_ABORT);
     return result;
 }
@@ -152,7 +233,7 @@ Java_com_example_kaptus_speech_WhisperNative_transcribe(
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_kaptus_speech_WhisperNative_segmentCount(JNIEnv *, jobject, jlong pointer) {
     if (pointer == 0) return 0;
-    return whisper_full_n_segments(reinterpret_cast<whisper_context *>(pointer));
+    return whisper_full_n_segments(whisperContext(pointer));
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -160,7 +241,7 @@ Java_com_example_kaptus_speech_WhisperNative_tokenCount(
     JNIEnv *, jobject, jlong pointer, jint segment
 ) {
     if (pointer == 0) return 0;
-    return whisper_full_n_tokens(reinterpret_cast<whisper_context *>(pointer), segment);
+    return whisper_full_n_tokens(whisperContext(pointer), segment);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -171,11 +252,27 @@ Java_com_example_kaptus_speech_WhisperNative_tokenText(
     jint segment,
     jint token
 ) {
-    if (pointer == 0) return environment->NewStringUTF("");
-    auto *context = reinterpret_cast<whisper_context *>(pointer);
+    if (pointer == 0) return unicodeString(environment, "");
+    auto *context = whisperContext(pointer);
     const whisper_token id = whisper_full_get_token_id(context, segment, token);
     const char *text = whisper_token_to_str(context, id);
-    return environment->NewStringUTF(text == nullptr ? "" : text);
+    return unicodeString(environment, text);
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_com_example_kaptus_speech_WhisperNative_tokenBytes(JNIEnv *environment, jobject, jlong pointer, jint segment, jint token) {
+    auto *context = whisperContext(pointer);
+    return bytes(environment, context == nullptr ? "" : whisper_token_to_str(context, whisper_full_get_token_id(context, segment, token)));
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_example_kaptus_speech_WhisperNative_segmentStart(JNIEnv *, jobject, jlong pointer, jint segment) {
+    return pointer == 0 ? -1 : whisper_full_get_segment_t0(whisperContext(pointer), segment);
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_example_kaptus_speech_WhisperNative_segmentEnd(JNIEnv *, jobject, jlong pointer, jint segment) {
+    return pointer == 0 ? -1 : whisper_full_get_segment_t1(whisperContext(pointer), segment);
 }
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -184,7 +281,7 @@ Java_com_example_kaptus_speech_WhisperNative_tokenStart(
 ) {
     if (pointer == 0) return -1;
     return whisper_full_get_token_data(
-        reinterpret_cast<whisper_context *>(pointer), segment, token
+        whisperContext(pointer), segment, token
     ).t0;
 }
 
@@ -194,7 +291,7 @@ Java_com_example_kaptus_speech_WhisperNative_tokenEnd(
 ) {
     if (pointer == 0) return -1;
     return whisper_full_get_token_data(
-        reinterpret_cast<whisper_context *>(pointer), segment, token
+        whisperContext(pointer), segment, token
     ).t1;
 }
 
@@ -204,6 +301,6 @@ Java_com_example_kaptus_speech_WhisperNative_tokenProbability(
 ) {
     if (pointer == 0) return 0.0f;
     return whisper_full_get_token_data(
-        reinterpret_cast<whisper_context *>(pointer), segment, token
+        whisperContext(pointer), segment, token
     ).p;
 }
