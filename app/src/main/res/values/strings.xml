@@ -123,4 +123,6 @@
     <string name="error_vad_model_load">The bundled voice detector could not be loaded.</string>
     <string name="error_microphone_16khz">This device cannot capture 16 kHz microphone audio.</string>
     <string name="error_microphone_initialize">The microphone could not be initialized.</string>
+    <string name="privacy_policy">Privacy policy</string>
+    <string name="privacy_policy_url" translatable="false">https://desigrit.github.io/kaptus/privacy.html</string>
 </resources>

@@ -19,8 +19,6 @@ Kaptus is an early preview made with hard-of-hearing viewers in mind, for Androi
   <img src="docs/images/kaptus-player-landscape.png" alt="Kaptus showing synchronized captions in landscape mode in a Pixel 10 Pro-style frame" width="88%" />
 </p>
 
-<p align="center"><sub>The Dune: Part Two caption shown here is illustrative and is not dialogue from the film.</sub></p>
-
 ## Download Kaptus
 
 **[Download the latest Kaptus APK](https://github.com/desigrit/kaptus/releases/latest/download/Kaptus-preview.apk)**
@@ -90,6 +88,8 @@ Choose **Prepare for theater** while you are online. Kaptus shows the maximum pr
 For the best result, choose the exact movie and year or the correct TV episode, place the phone where it can hear the room audio clearly, and start synchronization during spoken dialogue. Alternate cuts can use different timing or dialogue, so Resync or another caption track may be needed.
 
 ## Privacy
+
+Read the [Kaptus privacy policy](https://desigrit.github.io/kaptus/privacy.html).
 
 - Speech recognition runs on the phone.
 - Microphone audio stays in memory and is never saved to disk.

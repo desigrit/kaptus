@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500" role="img" aria-labelledby="title desc">
+  <title id="title">Kaptus. Follow every line.</title>
+  <desc id="desc">A warm yellow headline beside a quiet black caption panel on a deep teal background.</desc>
+  <defs>
+    <linearGradient id="backdrop" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#10585D"/><stop offset="1" stop-color="#176B70"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#backdrop)"/>
+  <path d="M-80 420 Q310 110 1150 390" fill="none" stroke="#F8EACB" stroke-opacity=".07" stroke-width="75"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="72" y="108" fill="#F8F5EC" font-size="27" font-weight="600" letter-spacing=".4">Kaptus</text>
+    <text x="68" y="217" fill="#FFF9EA" font-size="68" font-weight="600" letter-spacing="-2.5">Follow</text>
+    <text x="68" y="295" fill="#FFC857" font-size="68" font-weight="600" letter-spacing="-2.5">every line.</text>
+    <text x="72" y="360" fill="#D1E3DF" font-size="21">Personal captions for movies and TV.</text>
+    <rect x="548" y="138" width="404" height="236" rx="24" fill="#000"/>
+    <text x="750" y="245" text-anchor="middle" fill="#FFF" font-size="30" font-weight="600">We're right where</text>
+    <text x="750" y="286" text-anchor="middle" fill="#FFF" font-size="30" font-weight="600">we need to be.</text>
+  </g>
+</svg>
