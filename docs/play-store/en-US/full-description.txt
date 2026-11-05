@@ -1,0 +1,24 @@
+Follow every line.
+
+Kaptus puts movie and TV captions on your phone, so you can read along while watching on another screen. Made with hard-of-hearing viewers in mind, it gives the words room to breathe: large type, a true-black player and simple timing controls.
+
+START WHERE YOU ARE
+Open captions in the middle of a movie or episode. Kaptus can listen to nearby dialogue, find the scene and start the caption clock. Speech processing happens on your phone. The microphone switches off after a match, and you can tap Resync whenever you want it to listen again.
+
+YOUR CAPTIONS, YOUR LANGUAGE
+Search by movie title or choose a TV show's season and episode. Download captions in any language available for that title through your own OpenSubtitles API key, or open an SRT file from your phone or connected cloud storage. Choose caption and spoken languages separately, including dubbed audio.
+
+English audio with English captions works with the included speech model. Download the optional multilingual model once for Mandarin Chinese, Japanese, Spanish, French, German, Korean, Hindi, Telugu or Tamil audio with English captions. All other language combinations use manual timing.
+
+SETTLE INTO THE STORY
+Read one caption at a time in portrait or landscape. Adjust text size and screen brightness, pause or resume, scrub to another scene, or fine-tune timing in half-second steps. Tap to reveal controls, then let them fade away.
+
+PREPARE BEFORE YOU GO
+Save captions while online and reopen them from History. Once the relevant speech model is ready, prepared captions can synchronize without an internet connection. Kaptus shows the OpenSubtitles download allowance needed before preparation.
+
+ON YOUR PHONE
+Microphone audio stays in memory on your phone and is never saved or uploaded. Provider credentials are encrypted locally. Local SRT playback works without an OpenSubtitles account, and manual timing works without microphone access.
+
+OpenSubtitles search requires your own API key. Setup instructions are available at https://github.com/desigrit/kaptus#get-an-opensubtitles-api-key. Caption availability and download allowances depend on the provider.
+
+For Android 13 or newer on an ARM64 phone.

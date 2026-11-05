@@ -10,6 +10,14 @@ plugins {
 }
 
 val generatedModelAssets = layout.buildDirectory.dir("generated/modelAssets")
+val uploadStoreFile = providers.environmentVariable("KAPTUS_UPLOAD_STORE_FILE").orNull
+val uploadStorePassword = providers.environmentVariable("KAPTUS_UPLOAD_STORE_PASSWORD").orNull
+val uploadKeyAlias = providers.environmentVariable("KAPTUS_UPLOAD_KEY_ALIAS").orNull
+val uploadKeyPassword = providers.environmentVariable("KAPTUS_UPLOAD_KEY_PASSWORD").orNull
+val uploadSigningValues = listOf(uploadStoreFile, uploadStorePassword, uploadKeyAlias, uploadKeyPassword)
+check(uploadSigningValues.all { it == null } || uploadSigningValues.all { !it.isNullOrBlank() }) {
+    "Provide all four KAPTUS_UPLOAD signing environment variables, or none for an unsigned build."
+}
 
 fun sha256(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")
@@ -65,17 +73,28 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.kaptus"
+        applicationId = providers.gradleProperty("kaptusApplicationId").orElse("com.example.kaptus").get()
         minSdk = 33
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.3.1-preview"
+        versionCode = providers.gradleProperty("kaptusVersionCode").orElse("7").get().toInt()
+        versionName = providers.gradleProperty("kaptusVersionName").orElse("0.3.1-preview").get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         externalNativeBuild {
             cmake {
                 arguments += listOf("-DANDROID_STL=c++_static")
+            }
+        }
+    }
+
+    signingConfigs {
+        if (uploadStoreFile != null) {
+            create("upload") {
+                storeFile = rootProject.file(uploadStoreFile)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
             }
         }
     }
@@ -88,6 +107,7 @@ android {
         }
         release {
             isMinifyEnabled = false
+            if (uploadStoreFile != null) signingConfig = signingConfigs.getByName("upload")
             ndk {
                 abiFilters += "arm64-v8a"
             }

@@ -35,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -48,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -102,6 +104,8 @@ fun SettingsScreen(
     var captionSize by remember(settings.captionSizeSp) { mutableFloatStateOf(settings.captionSizeSp) }
     var brightness by remember(settings.theaterBrightness) { mutableFloatStateOf(settings.theaterBrightness) }
     val focusManager = LocalFocusManager.current
+    val uriHandler = LocalUriHandler.current
+    val privacyPolicyUrl = stringResource(R.string.privacy_policy_url)
     val hasChanges = apiKey.trim() != credentials.apiKey ||
         username.trim() != credentials.username || password != credentials.password
     val testing = isTesting
@@ -384,6 +388,14 @@ fun SettingsScreen(
                     SpeechModelSection(modelStatus, onDownloadModel, onCancelModel, onDeleteModel)
                 }
                 if (providerFirst) appearanceItems() else providerItems()
+                item(key = "privacy_policy") {
+                    TextButton(
+                        onClick = { uriHandler.openUri(privacyPolicyUrl) },
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("settings_privacy_policy")
+                    ) {
+                        Text(stringResource(R.string.privacy_policy))
+                    }
+                }
             }
         }
     }
