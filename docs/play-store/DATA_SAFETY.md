@@ -1,6 +1,6 @@
-# Data safety preparation
+# Data safety declaration
 
-This evidence is for the Android release source on this branch. Complete the live form after checking the provider's current data practices. The app's local-only microphone processing does not make the optional online provider path a no-data-collection app.
+These are the answers saved in Play Console and submitted with Android release 1.0.0 on November 4, 2026. They cover optional OpenSubtitles and model-hosting requests as well as the app's local processing.
 
 ## Data flows
 
@@ -12,24 +12,33 @@ This evidence is for the Android release source on this branch. Complete the liv
 | OpenSubtitles API key | OpenSubtitles API over HTTPS | Authenticate provider requests | Optional provider setup; encrypted locally |
 | OpenSubtitles username and password | OpenSubtitles login endpoint over HTTPS | Optional account authentication | Optional even within provider setup; encrypted locally |
 | Search text, movie/episode IDs, caption language, subtitle IDs | OpenSubtitles API over HTTPS | Find and download selected captions | User initiates provider features; provider controls server retention |
-| Network IP address, standard request headers | OpenSubtitles and subtitle delivery hosts | Deliver requests, provider access limits | Present on network requests; provider logging and use must be checked |
+| Network IP address, standard request headers | OpenSubtitles and subtitle delivery hosts | Deliver requests, provider access limits and security | Present on optional network requests; provider controls server retention |
 | Model identifier and network IP address | Hugging Face and delivery hosts | Download the optional multilingual model | Explicit user download; no credentials or speech sent |
+| Connection identifiers, request activity and inferred session location | Network providers | Service operation, security and analysis | Optional online paths; provider retention applies |
 
-## Proposed form treatment
+## Saved form answers
 
-- **Data collected: Yes**, for optional provider and model-hosting requests that transmit data off the device.
-- **App activity / In-app search history:** title queries sent to OpenSubtitles; optional; app functionality.
-- **Personal info / User IDs:** account username and account-linked API key; optional; app functionality and account management.
-- **Personal info / Other info:** optional account authentication secret, subject to the current form's exact definitions; app functionality and account management.
-- **Audio files / Voice or sound recordings:** not collected off-device. Do not mark audio as uploaded merely because RECORD_AUDIO is requested.
-- **Files and docs:** selected SRT files are read locally, not uploaded.
-- **Data encrypted in transit:** app endpoints use HTTPS; Android cleartext traffic is disabled. Provider download URLs are required to use HTTPS.
-- **Account creation:** Kaptus does not create app accounts. OpenSubtitles accounts belong to the external provider.
-- **Data deletion:** local data can be removed through Android app storage controls or uninstall. Optional model deletion and provider credential removal are available in Settings. Do not claim that clearing Kaptus deletes provider records.
+Data collection is **Yes**. All six declared types are **optional** and **not processed ephemerally**. Local SRT playback with the bundled English model remains available without these network requests.
 
-Before final submission, verify whether OpenSubtitles and the model hosts retain or use IP addresses as device identifiers or infer location. Declare the corresponding types based on their actual use. Do not mark requests as processed ephemerally without evidence of provider retention.
+| Play data type | Collected | Shared | Selected purposes |
+| --- | --- | --- | --- |
+| Personal info / User IDs | Yes | No | App functionality; account management; fraud prevention, security and compliance |
+| Personal info / Other info | Yes | No | App functionality; account management |
+| Location / Approximate location | Yes | Yes | Analytics; fraud prevention, security and compliance |
+| App activity / App interactions | Yes | Yes | App functionality; analytics; fraud prevention, security and compliance |
+| App activity / In-app search history | Yes | No | App functionality; fraud prevention, security and compliance |
+| Device or other IDs | Yes | Yes | App functionality; analytics; fraud prevention, security and compliance |
 
-Google excludes some user-initiated, expected transfers to third parties from its definition of sharing. Check that the actual provider disclosures and user choices satisfy that exception before selecting the sharing answer. The app currently explains that credentials are sent to OpenSubtitles and that microphone audio stays on the device.
+Credentials and title searches are user-initiated transfers to the named OpenSubtitles provider. Their sharing answers use Google's exception for expected, user-initiated transfers. Connection metadata is declared shared conservatively because providers use it for their own service operation, analysis and security. The app explains provider credential use in Settings, and the public policy describes connection records and inferred session location.
+
+OpenSubtitles describes request and IP logging with a normal seven-day retention period, with longer retention possible for disputes. Hugging Face describes automatically collected IP addresses and session location. Neither flow is declared ephemeral. Approximate location refers to provider inference from network connections, not Android location permission. Device identifiers refer to connection identifiers, not an advertising ID.
+
+- **Encryption in transit: Yes.** App endpoints use HTTPS, Android cleartext traffic is disabled, and provider download URLs must use HTTPS.
+- **Kaptus account creation: None.** Users may connect an existing external OpenSubtitles account, explained in the form's external-login answer.
+- **Data deletion request mechanism: No.** Settings can remove local credentials and the optional model. Clearing app storage or uninstalling removes local app data, but Kaptus does not operate a request process for deleting provider records.
+- **Audio, files and documents: Not collected off-device.** Microphone PCM, transcripts and SRT contents stay on the device.
+- **Advertising ID: No.** There are no advertising, analytics or automatic crash-reporting SDKs in the app.
+- **Independent security review badge and UPI certification: Not claimed.**
 
 ## Source references
 
@@ -42,3 +51,5 @@ Google excludes some user-initiated, expected transfers to third parties from it
 - `app/src/main/AndroidManifest.xml`
 - [Google Play Data safety definitions](https://support.google.com/googleplay/android-developer/answer/10787469)
 - [Google Play privacy policy requirements](https://support.google.com/googleplay/android-developer/answer/9859455)
+- [OpenSubtitles privacy policy](https://opensubtitles.tawk.help/article/privacy-policy)
+- [Hugging Face privacy policy](https://huggingface.co/privacy)

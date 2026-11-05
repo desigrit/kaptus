@@ -55,9 +55,10 @@ const { chromium } = require(process.env.KAPTUS_PLAYWRIGHT_MODULE || 'playwright
       ['03-settings.png', 'kaptus-settings.png']
     ]) {
       const png = await fs.readFile(path.join(root, 'docs/images', source));
-      const width = png.readUInt32BE(16), height = png.readUInt32BE(20);
+      const landscape = png.readUInt32BE(16) > png.readUInt32BE(20);
+      const width = landscape ? 1920 : 1080, height = landscape ? 1080 : 1920;
       await page.setViewportSize({ width, height });
-      await page.setContent(`<html><head><style>html,body{margin:0;background:#000}img{display:block}</style></head><body><img width="${width}" height="${height}" src="data:image/png;base64,${png.toString('base64')}"></body></html>`);
+      await page.setContent(`<html><head><style>html,body{margin:0;width:100%;height:100%;background:#17140e}img{display:block;width:100%;height:100%;object-fit:cover}</style></head><body><img src="data:image/png;base64,${png.toString('base64')}"></body></html>`);
       await page.locator('img').evaluate(image => image.decode());
       await page.screenshot({ path: path.join(screenshots, name), omitBackground: false });
       console.log(`${name}: ${width} x ${height}`);

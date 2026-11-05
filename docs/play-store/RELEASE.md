@@ -1,5 +1,19 @@
 # Google Play release preparation
 
+## Current Console status
+
+Kaptus 1.0.0 (version code 8) was submitted to **Closed testing - Alpha** on November 4, 2026. Publishing overview shows **Changes in review**. Managed publishing is off, so the closed test will publish after approval.
+
+The listing is free, targets ages 13 and older, and uses the Video Players & Editors category. App access, content ratings, Data safety and the remaining app-content declarations are saved. The signed AAB passed Console processing with no release errors. The only release warning is about a missing deobfuscation file; this build does not use code shrinking.
+
+The saved Alpha country list has 147 named markets plus Rest of world, with all 30 EEA countries excluded. The track is explicitly unsynced from production because production access is currently locked.
+
+The account must run a closed test with at least **12 opted-in testers for 14 continuous days** before applying for production access. The `Kaptus closed test` email list currently contains the developer's account. Add the remaining testers in Console, then share the opt-in link after the test becomes available. Adding an address to the list does not opt that person in.
+
+- [Publishing overview](https://play.google.com/console/u/0/developers/6067490903935725737/app/4975177013176012197/publishing)
+- [Closed test](https://play.google.com/console/u/0/developers/6067490903935725737/app/4975177013176012197/tracks/4701086012298210700)
+- [Tester opt-in link, available after approval](https://play.google.com/apps/testing/com.desigrit.kaptus)
+
 ## Release identity and files
 
 The first Play release candidate is **Kaptus 1.0.0**, version code **8**, package **com.desigrit.kaptus**. The developer confirmed that this is Kaptus's first listing. Google Play package names are permanent. The normal development build retains `com.example.kaptus` and its existing data.
@@ -35,7 +49,7 @@ For CI or a different machine, supply the existing keystore through `KAPTUS_UPLO
 | Category | Video Players & Editors |
 | Public support email | raunakoberoi@gmail.com |
 
-The developer confirmed that Kaptus will be free to install. Confirm the intended target age groups when completing the account forms. Kaptus contains no advertising or in-app purchases. Its microphone permission supports an optional foreground auto-seek feature. It uses the Android document picker instead of broad media permissions.
+Kaptus is free to install and targets the 13-15, 16-17 and 18+ age groups. Kaptus contains no advertising or in-app purchases. Its microphone permission supports an optional foreground auto-seek feature. It uses the Android document picker instead of broad media permissions.
 
 The policy source is `docs/site/privacy.html`. It is published at the root of the `gh-pages` branch using GitHub Pages, and the public HTTPS URL has been verified. The app links to it from Settings. When updating the policy, update both the source and the published branch.
 
@@ -43,25 +57,23 @@ The policy source is `docs/site/privacy.html`. It is published at the root of th
 
 In **Test and release > Production > Countries / regions**, select the intended markets and deselect every country in `eea-exclusions.csv`. It contains the 27 EU members plus Iceland, Liechtenstein and Norway. The United Kingdom and Switzerland are outside the EEA.
 
-Keep open and closed test tracks synced to the same country list, or apply the same exclusions explicitly if a track is unsynced. Check the saved selection before rollout. Internal testing has no country targeting; use a controlled tester list for that track. These are planned settings until confirmed in Play Console.
+The exclusions have been saved and read back for Closed testing - Alpha: none of the 30 EEA names appears in its 148 selected targets. When production becomes available, apply the same exclusions there before rollout. Keep future test tracks synced to that country list or apply the exclusions explicitly. Internal testing does not support country targeting.
 
 ## App access and review
 
 Local SRT playback is accessible without an account. Reviewers can open an SRT using the document picker, choose its language, select manual timing and use playback controls. `review-demo.srt` is included for that path.
 
-OpenSubtitles search and downloads require an API key. Declare that part of the app as restricted in the App access form and provide a dedicated reviewer API key plus setup instructions through Play Console's private access fields. Do not publish a personal API key in this repository or the public listing. A reviewer should not need to create an account or contact the developer to complete review. Provider download allowance must cover review.
+OpenSubtitles search and downloads require an API key. App access is declared partially restricted. The developer authorized their existing key for Google's reviewers, and it is saved only in Console's private instructions. Search and download access were verified. The instructions explain the five-download daily allowance and provide a local SRT fallback. No username, password, account creation or payment is required. The optional setting to share access with trusted partner devices is off. Never put reviewer credentials in the repository or public listing.
 
 Microphone permission is optional. To review English auto-seek, open English captions, set spoken language to English, permit the microphone, and play matching dialogue from a separate speaker. Once a scene is found, capture stops. The bundled English model requires no download. The optional multilingual model is available in Settings before reviewing the nine additional language pairs.
 
-## Console sequence
+## Subsequent releases
 
-1. Sign into Play Console using a normal supported browser. Google may block sign-in from Playwright-controlled browsers.
-2. Check whether Kaptus already has a listing, its permanent package name, and the account's production eligibility.
-3. Create the app if needed. Add the public support email, listing text, artwork and live privacy URL.
-4. Complete App access, Ads, Target audience, Content rating and Data safety using the actual app behavior and the evidence in `DATA_SAFETY.md`.
-5. Enroll in Play App Signing, upload the signed AAB and review Play's bundle checks and pre-launch report.
-6. Set and verify the non-EEA country list for the intended testing or production track.
-7. If Play requires closed testing, enroll the required testers and satisfy the testing period before applying for production access. Otherwise, complete the release review and submit.
+1. Sign into the existing Kaptus listing using a supported browser. Keep the same package name and upload key, and increase the version code.
+2. Update the listing and app-content declarations if the app's behavior changes. Keep the live privacy policy aligned with the source.
+3. Upload the signed AAB to the appropriate track and review bundle checks and pre-launch results.
+4. Verify the non-EEA country list and reviewer access before sending changes for review.
+5. For the first public release, complete the closed test, apply for production access, and set production country targeting before rollout.
 
 ## Sources
 
